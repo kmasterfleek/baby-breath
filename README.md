@@ -1,3 +1,39 @@
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!--  START HERE — orientation for the Baby Breath team                     -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+
+> # 👶 START HERE
+>
+> **This repo is a fork of RuView / wifi-densepose — a large, general WiFi-sensing platform. You are almost certainly NOT here to work on that platform.**
+>
+> You're here for **"My Baby"** — a contactless WiFi baby vital-signs monitor (breathing + heart rate) built *on top of* that platform.
+>
+> ## 👉 Read this first: [`babybreath-app/README.md`](babybreath-app/README.md)
+>
+> That is the product entry point. Everything below this banner is the underlying platform (the "engine") and is mostly vendored/upstream — read it for reference, but you rarely change it.
+>
+> ### Work here / ignore that
+>
+> | | Path | What it is |
+> |---|------|-----------|
+> | ✅ | `babybreath-app/` | **The product** — Electron app, UI, provisioning wizard. Your home base. |
+> | ✅ | `rust-port/wifi-densepose-rs/crates/wifi-densepose-sensing-server/` | The one Rust crate the app runs (vitals, pose, fusion). |
+> | ✅ | `firmware/esp32-csi-node/` | ESP32-S3 sensor firmware (only if touching hardware). |
+> | 🔒 | the other 14 crates in `rust-port/.../crates/` | Upstream platform — read-only. |
+> | 🔒 | `v1/`, `docs/adr/`, `plans/`, `examples/`, `vendor/` | Upstream RuView/wifi-densepose. Reference, not the product. |
+>
+> ### Mental model
+> ```
+> RuView / wifi-densepose   ← the big fork (engine)   ← DON'T work here
+>         └── babybreath-app/   ← the product ("My Baby")   ← WORK HERE
+> ```
+>
+> The four core technologies (**DensePose, RuVector, MinCut, RuView**) all live *in the engine* and are already wired up. The app README's tech table shows which file each lives in — read them, but you don't need to rebuild them.
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!--  Everything below is the underlying RuView / wifi-densepose platform    -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+
 # π RuView
 
 <p align="center">
