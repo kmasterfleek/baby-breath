@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+bin/
+
+# Runtime data (recordings, downloaded models)
+data/recordings/*
+data/models/*
+!data/recordings/.gitkeep
+!data/models/.gitkeep
+
+# Coordination / local state
+.claude-flow/
+
+# macOS
+.DS_Store
+._*
+
+# Logs
+*.log

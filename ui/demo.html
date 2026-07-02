@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WiFi DensePose — Through-Wall Human Sensing</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --bg:#08080d; --surface:#101018; --border:#1a1a28; --text:#d0d0dc; --dim:#555568; --accent:#6366f1; --cyan:#22d3ee; --green:#34d399; --red:#f87171; --amber:#fbbf24; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+
+  .header { padding:16px 40px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); }
+  .header h1 { font-size:18px; font-weight:600; }
+  .header h1 em { font-style:normal; color:var(--cyan); }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block; margin-right:8px; animation:blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .pill { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--dim); }
+
+  .main { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:1px; background:var(--border); padding:0; }
+
+  .card { background:var(--surface); display:flex; flex-direction:column; padding:32px 40px; position:relative; overflow:hidden; }
+  .card-icon { font-size:28px; margin-bottom:8px; }
+  .card-label { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:12px; }
+  .card-value { font-size:64px; font-weight:700; font-family:'JetBrains Mono',monospace; line-height:1; transition: color 0.6s; }
+  .card-unit { font-size:22px; font-weight:400; color:var(--dim); margin-left:6px; }
+  .card-sub { font-size:12px; color:var(--dim); margin-top:10px; font-family:'JetBrains Mono',monospace; }
+  .card canvas { flex:1; width:100%; min-height:0; margin-top:16px; }
+
+  /* Presence card special */
+  .presence-indicator { width:16px; height:16px; border-radius:50%; display:inline-block; margin-right:12px; transition: background 0.6s, box-shadow 0.6s; vertical-align:middle; }
+  .presence-indicator.on { background:var(--green); box-shadow:0 0 20px rgba(52,211,153,0.4); }
+  .presence-indicator.off { background:var(--dim); box-shadow:none; }
+
+  /* Nodes footer */
+  .nodes-bar { padding:12px 40px; border-top:1px solid var(--border); display:flex; align-items:center; gap:20px; background:var(--surface); }
+  .node-chip { display:flex; align-items:center; gap:6px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--dim); }
+  .node-led { width:7px; height:7px; border-radius:50%; }
+  .node-led.on { background:var(--green); box-shadow:0 0 6px rgba(52,211,153,0.5); }
+  .node-led.off { background:#333; }
+  .nodes-label { font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-right:auto; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>WiFi <em>DensePose</em> — Through-Wall Vital Signs</h1>
+  <div class="pill"><span class="live-dot" id="liveDot"></span><span id="statusText">CONNECTING</span></div>
+</div>
+
+<div class="main">
+  <!-- Heart Rate -->
+  <div class="card">
+    <div class="card-label">Heart Rate</div>
+    <div class="card-value" id="hrVal" style="color:var(--red)">—<span class="card-unit">BPM</span></div>
+    <div class="card-sub" id="hrSub">Waiting for signal...</div>
+    <canvas id="hrCanvas"></canvas>
+  </div>
+
+  <!-- Breathing Rate -->
+  <div class="card">
+    <div class="card-label">Breathing Rate</div>
+    <div class="card-value" id="brVal" style="color:var(--cyan)">—<span class="card-unit">BPM</span></div>
+    <div class="card-sub" id="brSub">Waiting for signal...</div>
+    <canvas id="brCanvas"></canvas>
+  </div>
+
+  <!-- Persons in Room -->
+  <div class="card" style="align-items:center; justify-content:center; text-align:center;">
+    <div class="card-label">Persons in Room</div>
+    <div class="card-value" id="personBig" style="font-size:120px; color:var(--green); transition: color 0.6s;">0</div>
+    <div class="card-sub" id="presenceSub" style="font-size:14px; margin-top:16px;">Monitoring</div>
+  </div>
+
+  <!-- Signal Quality -->
+  <div class="card">
+    <div class="card-label">WiFi Signal Intelligence</div>
+    <div style="display:flex; gap:32px; margin-top:8px;">
+      <div>
+        <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">MOTION ENERGY</div>
+        <div style="font-size:36px; font-weight:700; font-family:'JetBrains Mono',monospace;" id="motionVal">0.0</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">PERSONS</div>
+        <div style="font-size:36px; font-weight:700; font-family:'JetBrains Mono',monospace;" id="personVal">0</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">CONFIDENCE</div>
+        <div style="font-size:36px; font-weight:700; font-family:'JetBrains Mono',monospace;" id="confVal">0<span style="font-size:18px; color:var(--dim)">%</span></div>
+      </div>
+    </div>
+    <div class="card-sub" id="sigSub">CSI subcarriers: 128 per node &middot; Channel 11</div>
+    <canvas id="sigCanvas"></canvas>
+  </div>
+</div>
+
+<div class="nodes-bar">
+  <div class="nodes-label">Mesh Nodes</div>
+  <div id="nodesRow" style="display:flex; gap:16px;"></div>
+</div>
+
+<script>
+const state = {
+  hr: null, br: null, smoothHR: null, smoothBR: null,
+  motion: 0, smoothMotion: 0, presence: false, confidence: 0,
+  motionLevel: 'absent', persons: 0, nodes: new Map(),
+  hrHistory: [], brHistory: [], motionHistory: [], sigHistory: []
+};
+
+function ema(prev, curr, alpha) {
+  if (prev === null || prev === 0) return curr;
+  if (curr === null || curr === 0) return prev;
+  return prev + alpha * (curr - prev);
+}
+
+// ─── WebSocket ──────────────────────────────────────────────
+let ws, lastUpdate = 0;
+function connect() {
+  const host = location.hostname || 'localhost';
+  ws = new WebSocket(`ws://${host}:8765/ws/sensing`);
+  ws.onopen = () => { document.getElementById('statusText').textContent = 'LIVE — WiFi CSI Sensing'; };
+  ws.onclose = () => { document.getElementById('statusText').textContent = 'RECONNECTING'; setTimeout(connect, 2000); };
+  ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch(err) {} };
+}
+
+function onMsg(msg) {
+  if (msg.type !== 'sensing_update') return;
+  const now = Date.now();
+  if (now - lastUpdate < 400) return;
+  lastUpdate = now;
+
+  const c = msg.classification || {};
+  state.presence = c.presence || false;
+  state.confidence = c.confidence || 0;
+  state.motionLevel = c.motion_level || 'absent';
+
+  const f = msg.features || {};
+  state.motion = f.motion_band_power || 0;
+  state.smoothMotion = ema(state.smoothMotion, state.motion, 0.12);
+  state.motionHistory.push(state.smoothMotion);
+  if (state.motionHistory.length > 100) state.motionHistory.shift();
+
+  // Signal field for spectrogram
+  if (msg.signal_field && msg.signal_field.values) {
+    state.sigHistory.push(msg.signal_field.values);
+    if (state.sigHistory.length > 80) state.sigHistory.shift();
+  }
+
+  const v = msg.vital_signs || {};
+  if (v.heart_rate_bpm && v.heart_rate_bpm > 30 && v.heart_rate_bpm < 180) {
+    state.hr = v.heart_rate_bpm;
+    state.smoothHR = ema(state.smoothHR, state.hr, 0.06);
+  }
+  if (v.breathing_rate_bpm && v.breathing_rate_bpm > 4 && v.breathing_rate_bpm < 40) {
+    state.br = v.breathing_rate_bpm;
+    state.smoothBR = ema(state.smoothBR, state.br, 0.06);
+  }
+
+  state.hrHistory.push(state.smoothHR || 0);
+  if (state.hrHistory.length > 100) state.hrHistory.shift();
+  state.brHistory.push(state.smoothBR || 0);
+  if (state.brHistory.length > 100) state.brHistory.shift();
+
+  state.persons = msg.estimated_persons || (msg.persons && msg.persons.length) || (c.presence ? 1 : 0);
+  if (state.persons > 10) state.persons = 1;
+  if (msg.nodes) msg.nodes.forEach(n => state.nodes.set(n.node_id, { ...n, ts: now }));
+
+  render();
+}
+
+// Poll nodes
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/v1/nodes');
+    const d = await r.json();
+    const now = Date.now();
+    if (d.nodes) d.nodes.forEach(n => state.nodes.set(n.node_id, { ...n, ts: now - (n.last_seen_ms||0) }));
+    renderNodes();
+  } catch(e) {}
+}, 2000);
+
+// ─── Render ─────────────────────────────────────────────────
+function render() {
+  // Heart rate
+  const hrEl = document.getElementById('hrVal');
+  if (state.smoothHR) {
+    hrEl.innerHTML = `${state.smoothHR.toFixed(0)}<span class="card-unit">BPM</span>`;
+    hrEl.style.color = 'var(--red)';
+    document.getElementById('hrSub').textContent = `Raw: ${state.hr ? state.hr.toFixed(1) : '—'} BPM`;
+  }
+
+  // Breathing
+  const brEl = document.getElementById('brVal');
+  if (state.smoothBR) {
+    brEl.innerHTML = `${state.smoothBR.toFixed(1)}<span class="card-unit">BPM</span>`;
+    brEl.style.color = 'var(--cyan)';
+    document.getElementById('brSub').textContent = `Raw: ${state.br ? state.br.toFixed(1) : '—'} BPM`;
+  }
+
+  // Persons in room
+  const pb = document.getElementById('personBig');
+  const count = state.presence ? Math.max(state.persons, 1) : 0;
+  pb.textContent = count;
+  pb.style.color = count > 0 ? 'var(--green)' : 'var(--dim)';
+  document.getElementById('presenceSub').textContent = count > 0 ? 'Detected via WiFi CSI' : 'Room empty';
+
+  // Signal stats
+  document.getElementById('motionVal').textContent = state.smoothMotion.toFixed(1);
+  document.getElementById('personVal').textContent = state.persons;
+  document.getElementById('confVal').innerHTML = `${(state.confidence * 100).toFixed(0)}<span style="font-size:18px; color:var(--dim)">%</span>`;
+
+  renderNodes();
+  drawWave('hrCanvas', state.hrHistory, 'rgba(248,113,113,1)', 'rgba(248,113,113,0.06)');
+  drawWave('brCanvas', state.brHistory, 'rgba(34,211,238,1)', 'rgba(34,211,238,0.06)');
+  drawSignal();
+}
+
+function renderNodes() {
+  let html = '';
+  for (let id = 1; id <= 4; id++) {
+    const n = state.nodes.get(id);
+    const on = n && (n.status === 'active' || (Date.now() - (n.ts||0)) < 5000);
+    html += `<div class="node-chip"><div class="node-led ${on?'on':'off'}"></div>Node ${id}</div>`;
+  }
+  document.getElementById('nodesRow').innerHTML = html;
+}
+
+// ─── Waveform ───────────────────────────────────────────────
+function drawWave(canvasId, data, strokeColor, fillColor) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const valid = data.filter(v => v > 0);
+  if (valid.length < 3) return;
+
+  const minV = Math.min(...valid) * 0.9;
+  const maxV = Math.max(...valid) * 1.1;
+  const range = maxV - minV || 1;
+  const step = W / (data.length - 1);
+
+  // Fill
+  ctx.beginPath(); ctx.moveTo(0, H);
+  data.forEach((v, i) => { const y = H - ((Math.max(v, minV) - minV) / range) * (H - 6); ctx.lineTo(i * step, y); });
+  ctx.lineTo(W, H); ctx.closePath();
+  ctx.fillStyle = fillColor; ctx.fill();
+
+  // Stroke
+  ctx.beginPath();
+  data.forEach((v, i) => { const y = H - ((Math.max(v, minV) - minV) / range) * (H - 6); i === 0 ? ctx.moveTo(0, y) : ctx.lineTo(i * step, y); });
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; ctx.stroke();
+
+  // End dot
+  const lastY = H - ((Math.max(data[data.length-1], minV) - minV) / range) * (H - 6);
+  ctx.beginPath(); ctx.arc((data.length-1) * step, lastY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = strokeColor; ctx.fill();
+}
+
+function drawSignal() {
+  const canvas = document.getElementById('sigCanvas');
+  if (!canvas || state.sigHistory.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const histLen = state.sigHistory.length;
+  const bins = state.sigHistory[0].length;
+  const colW = W / histLen;
+  const binH = H / bins;
+  for (let t = 0; t < histLen; t++) {
+    const frame = state.sigHistory[t];
+    for (let b = 0; b < bins; b++) {
+      const v = Math.min(1, frame[b]);
+      if (v < 0.03) continue;
+      ctx.fillStyle = `hsla(${240 - v * 60}, 80%, 50%, ${v * 0.7})`;
+      ctx.fillRect(t * colW, b * binH, colW + 0.5, binH + 0.5);
+    }
+  }
+}
+
+connect();
+</script>
+</body>
+</html>

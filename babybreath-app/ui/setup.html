@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Baby — Setup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --bg:#0b0b12; --surface:#13131d; --border:#1c1c2c; --text:#d8d8e4; --dim:#666680; --cyan:#67e8f9; --green:#4ade80; --red:#f87171; --amber:#fbbf24; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; -webkit-app-region:drag; }
+  .setup-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:48px; max-width:520px; width:90%; -webkit-app-region:no-drag; }
+  h1 { font-size:28px; font-weight:700; margin-bottom:8px; }
+  h1 em { font-style:normal; color:var(--cyan); }
+  .subtitle { color:var(--dim); font-size:14px; margin-bottom:32px; line-height:1.5; }
+
+  .step { margin-bottom:20px; opacity:0.4; transition: opacity 0.4s; }
+  .step.active, .step.done { opacity:1; }
+  .step-header { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .step-num { display:inline-flex; width:28px; height:28px; border-radius:50%; background:var(--border); align-items:center; justify-content:center; font-size:12px; font-weight:600; flex-shrink:0; transition: background 0.3s; }
+  .step.done .step-num { background:var(--green); color:#000; }
+  .step.active .step-num { background:var(--cyan); color:#000; }
+  .step-label { font-size:14px; font-weight:500; }
+  .step-body { margin-left:38px; font-size:13px; color:var(--dim); }
+
+  input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:10px 14px; border-radius:6px; font-size:14px; width:100%; margin-top:8px; font-family:inherit; }
+  input:focus { outline:none; border-color:var(--cyan); }
+
+  .btn { display:inline-block; padding:12px 24px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:all 0.2s; margin-top:16px; }
+  .btn-primary { background:var(--cyan); color:#000; }
+  .btn-primary:hover { opacity:0.9; }
+  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-secondary { background:var(--border); color:var(--text); margin-left:8px; }
+
+  .msg { margin-top:12px; font-size:13px; padding:10px 14px; border-radius:6px; display:none; line-height:1.5; }
+  .msg.ok { display:block; background:rgba(74,222,128,0.1); color:var(--green); }
+  .msg.error { display:block; background:rgba(248,113,113,0.1); color:var(--red); }
+  .msg.info { display:block; background:rgba(103,232,249,0.1); color:var(--cyan); }
+
+  .sensor-row { display:flex; align-items:center; gap:10px; padding:10px 14px; margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition: border-color 0.2s; }
+  .sensor-row:hover { border-color:var(--cyan); }
+  .sensor-row.provisioned { border-color:var(--green); cursor:default; }
+  .sensor-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .sensor-dot.found { background:var(--cyan); animation: pulse 1.5s infinite; }
+  .sensor-dot.done { background:var(--green); animation:none; }
+  .sensor-dot.busy { background:var(--amber); animation: pulse 0.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .sensor-name { font-size:13px; font-weight:500; }
+  .sensor-status { margin-left:auto; font-size:11px; font-family:monospace; }
+
+  .method-toggle { display:flex; gap:8px; margin-bottom:16px; }
+  .method-btn { padding:6px 14px; border-radius:4px; font-size:12px; border:1px solid var(--border); background:none; color:var(--dim); cursor:pointer; }
+  .method-btn.active { border-color:var(--cyan); color:var(--cyan); background:rgba(103,232,249,0.1); }
+</style>
+</head>
+<body>
+
+<div class="setup-card">
+  <h1>My <em>Baby</em></h1>
+  <div class="subtitle">Let's set up your crib sensors. No cables needed — we'll connect wirelessly.</div>
+
+  <!-- Step 1: WiFi -->
+  <div class="step active" id="step1">
+    <div class="step-header">
+      <span class="step-num">1</span>
+      <span class="step-label">Your home WiFi</span>
+    </div>
+    <div class="step-body">
+      The sensors need to join your WiFi to send data to this computer.
+      <input type="text" id="ssid" placeholder="WiFi network name">
+      <input type="password" id="pass" placeholder="WiFi password" style="margin-top:6px;">
+    </div>
+  </div>
+
+  <!-- Step 2: Find sensors -->
+  <div class="step" id="step2">
+    <div class="step-header">
+      <span class="step-num">2</span>
+      <span class="step-label">Find &amp; configure sensors</span>
+    </div>
+    <div class="step-body">
+      <div class="method-toggle">
+        <button class="method-btn active" id="bleBtn" onclick="setMethod('ble')">Wireless (Bluetooth)</button>
+        <button class="method-btn" id="usbBtn" onclick="setMethod('usb')">USB Cable</button>
+      </div>
+      <div id="sensorArea">Power on both sensors. We'll find them automatically.</div>
+      <div id="sensorList"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div class="step" id="step3">
+    <div class="step-header">
+      <span class="step-num">3</span>
+      <span class="step-label">Start monitoring</span>
+    </div>
+    <div class="step-body">Place sensors on the crib rails. Your baby's vitals will appear on screen.</div>
+  </div>
+
+  <button class="btn btn-primary" id="btn" onclick="go()">Next</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+let currentStep = 1;
+let method = 'ble'; // 'ble' or 'usb'
+let sensors = []; // {name, device/port, provisioned}
+let localIP = '';
+
+function show(text, level) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + level;
+}
+
+function setMethod(m) {
+  method = m;
+  document.getElementById('bleBtn').classList.toggle('active', m === 'ble');
+  document.getElementById('usbBtn').classList.toggle('active', m === 'usb');
+  document.getElementById('sensorArea').textContent = m === 'ble'
+    ? 'Power on both sensors. We\'ll find them via Bluetooth.'
+    : 'Plug both sensors into this computer via USB.';
+}
+
+function setStep(n) {
+  currentStep = n;
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('step' + i);
+    el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+}
+
+function renderSensors() {
+  document.getElementById('sensorList').innerHTML = sensors.map((s, i) => `
+    <div class="sensor-row ${s.provisioned ? 'provisioned' : ''}">
+      <div class="sensor-dot ${s.provisioned ? 'done' : s.busy ? 'busy' : 'found'}"></div>
+      <span class="sensor-name">Crib ${i === 0 ? 'Left' : 'Right'} — ${s.name}</span>
+      <span class="sensor-status" style="color:${s.provisioned ? 'var(--green)' : s.busy ? 'var(--amber)' : 'var(--cyan)'}">
+        ${s.provisioned ? 'Ready' : s.busy ? 'Configuring...' : 'Found'}
+      </span>
+    </div>
+  `).join('');
+}
+
+async function go() {
+  const btn = document.getElementById('btn');
+
+  if (currentStep === 1) {
+    const ssid = document.getElementById('ssid').value.trim();
+    if (!ssid) { show('Enter your WiFi network name', 'error'); return; }
+
+    // Get local IP
+    if (window.babybreath) {
+      localIP = await window.babybreath.getLocalIP();
+    }
+
+    setStep(2);
+    btn.textContent = method === 'ble' ? 'Scan for Sensors' : 'Set Up Sensors';
+    show(`WiFi: ${ssid}. Your computer is at ${localIP || 'detecting...'}`, 'info');
+
+  } else if (currentStep === 2) {
+    const ssid = document.getElementById('ssid').value.trim();
+    const pass = document.getElementById('pass').value;
+    btn.disabled = true;
+
+    if (method === 'ble') {
+      await provisionBLE(ssid, pass);
+    } else {
+      await provisionUSB(ssid, pass);
+    }
+
+  } else if (currentStep === 3) {
+    if (window.babybreath) {
+      window.babybreath.navigate('monitor');
+    } else {
+      window.location.href = '/ui/baby.html';
+    }
+  }
+}
+
+// ─── BLE Provisioning ───────────────────────────────────────
+async function provisionBLE(ssid, pass) {
+  const btn = document.getElementById('btn');
+  btn.textContent = 'Scanning...';
+  show('Looking for My Baby sensors via Bluetooth...', 'info');
+
+  try {
+    // Scan for first sensor
+    for (let nodeId = 1; nodeId <= 2; nodeId++) {
+      show(`Searching for Sensor ${nodeId}... Click the Bluetooth popup to select your sensor.`, 'info');
+
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: 'MYBABY_' }],
+        optionalServices: ['0000ffff-0000-1000-8000-00805f9b34fb'] // ESP provisioning service
+      });
+
+      sensors.push({ name: device.name || 'Sensor', device, provisioned: false, busy: true });
+      renderSensors();
+
+      show(`Connected to ${device.name}. Sending WiFi credentials...`, 'info');
+
+      // Connect and send credentials
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService('0000ffff-0000-1000-8000-00805f9b34fb');
+
+      // Write SSID
+      const ssidChar = await service.getCharacteristic('0000ff01-0000-1000-8000-00805f9b34fb');
+      await ssidChar.writeValue(new TextEncoder().encode(ssid));
+
+      // Write password
+      const passChar = await service.getCharacteristic('0000ff02-0000-1000-8000-00805f9b34fb');
+      await passChar.writeValue(new TextEncoder().encode(pass));
+
+      // Write target config (IP + port + nodeId)
+      const configChar = await service.getCharacteristic('0000ff03-0000-1000-8000-00805f9b34fb');
+      const config = JSON.stringify({ ip: localIP, port: 5005, node_id: nodeId });
+      await configChar.writeValue(new TextEncoder().encode(config));
+
+      device.gatt.disconnect();
+
+      sensors[sensors.length - 1].provisioned = true;
+      sensors[sensors.length - 1].busy = false;
+      renderSensors();
+      show(`Sensor ${nodeId} configured!` + (nodeId < 2 ? ' Now let\'s find Sensor 2.' : ''), 'ok');
+    }
+
+    // All done
+    setStep(3);
+    btn.textContent = 'Start Monitoring';
+    btn.disabled = false;
+    show('Both sensors configured! Place them on the crib. They\'ll connect to WiFi automatically.', 'ok');
+
+  } catch(e) {
+    show('Bluetooth error: ' + e.message + '. Make sure sensors are powered on.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Retry Scan';
+  }
+}
+
+// ─── USB Provisioning (fallback) ────────────────────────────
+async function provisionUSB(ssid, pass) {
+  const btn = document.getElementById('btn');
+
+  if (!window.babybreath) {
+    show('USB provisioning requires the My Baby desktop app.', 'error');
+    btn.disabled = false;
+    return;
+  }
+
+  const ports = await window.babybreath.listSerialPorts();
+  if (ports.length === 0) {
+    show('No sensors found on USB. Plug them in and try again.', 'error');
+    btn.disabled = false;
+    return;
+  }
+
+  for (let i = 0; i < Math.min(ports.length, 2); i++) {
+    const nodeId = i + 1;
+    btn.textContent = `Setting up Sensor ${nodeId}...`;
+    sensors.push({ name: ports[i].split('/').pop(), provisioned: false, busy: true });
+    renderSensors();
+
+    try {
+      await window.babybreath.provisionBoard({ port: ports[i], ssid, password: pass, nodeId });
+      sensors[sensors.length - 1].provisioned = true;
+      sensors[sensors.length - 1].busy = false;
+      renderSensors();
+    } catch(e) {
+      show(`Sensor ${nodeId} failed: ${e}`, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+      return;
+    }
+  }
+
+  setStep(3);
+  btn.textContent = 'Start Monitoring';
+  btn.disabled = false;
+  show('Sensors configured! Unplug from USB, place on crib, plug into wall chargers.', 'ok');
+}
+
+// Init
+(async () => {
+  if (window.babybreath) {
+    localIP = await window.babybreath.getLocalIP();
+  }
+})();
+</script>
+</body>
+</html>

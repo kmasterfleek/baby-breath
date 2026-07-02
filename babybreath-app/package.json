@@ -1,0 +1,37 @@
+{
+  "name": "my-baby",
+  "version": "1.0.0",
+  "description": "WiFi-based contactless baby vital signs monitor",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "BabyBreath",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.babybreath.app",
+    "productName": "My Baby",
+    "mac": {
+      "category": "public.app-category.healthcare-fitness"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ui/**/*",
+      "bin/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/",
+        "to": "bin/",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}

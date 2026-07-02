@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Baby — WiFi Vital Signs Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root, [data-theme="dark"] {
+    --bg:#0b0b12; --surface:#13131d; --border:#1c1c2c; --text:#d8d8e4; --dim:#666680;
+    --blue:#5b8def; --green:#4ade80; --red:#f87171; --amber:#fbbf24; --cyan:#22d3ee;
+    --breath:#67e8f9; --heart:#fb7185;
+    --wave-fill-br:rgba(103,232,249,0.06); --wave-stroke-br:rgba(103,232,249,1);
+    --wave-fill-hr:rgba(251,113,133,0.06); --wave-stroke-hr:rgba(251,113,133,1);
+    --wave-fill-motion:rgba(91,141,239,0.04); --wave-stroke-motion:rgba(91,141,239,0.6);
+  }
+  [data-theme="light"] {
+    --bg:#f5f5f8; --surface:#ffffff; --border:#e2e2ea; --text:#1a1a2e; --dim:#8888a0;
+    --blue:#3b6fd4; --green:#16a34a; --red:#dc2626; --amber:#d97706; --cyan:#0891b2;
+    --breath:#0e7490; --heart:#e11d48;
+    --wave-fill-br:rgba(14,116,144,0.08); --wave-stroke-br:rgba(14,116,144,1);
+    --wave-fill-hr:rgba(225,29,72,0.08); --wave-stroke-hr:rgba(225,29,72,1);
+    --wave-fill-motion:rgba(59,111,212,0.06); --wave-stroke-motion:rgba(59,111,212,0.6);
+  }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; transition: background 0.3s, color 0.3s; }
+
+  /* Header */
+  .header { padding:16px 32px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); background:var(--surface); }
+  .brand { font-size:20px; font-weight:700; }
+  .brand em { font-style:normal; color:var(--breath); }
+  .status-bar { display:flex; align-items:center; gap:16px; }
+  .status-dot { width:10px; height:10px; border-radius:50%; transition: background 0.5s, box-shadow 0.5s; }
+  .status-dot.ok { background:var(--green); box-shadow:0 0 12px rgba(74,222,128,0.5); animation: pulse-green 3s infinite; }
+  .status-dot.warn { background:var(--amber); box-shadow:0 0 12px rgba(251,191,36,0.5); animation: pulse-amber 1.5s infinite; }
+  .status-dot.alert { background:var(--red); box-shadow:0 0 16px rgba(248,113,113,0.7); animation: pulse-red 0.6s infinite; }
+  @keyframes pulse-green { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  @keyframes pulse-amber { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .status-text { font-size:14px; font-weight:600; transition: color 0.5s; }
+
+  /* Main layout */
+  .main { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto 1fr; gap:1px; background:var(--border); }
+
+  /* Big vital cards */
+  .vital-card { background:var(--surface); padding:32px 40px; display:flex; flex-direction:column; }
+  .vital-label { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .vital-icon { font-size:18px; }
+  .vital-value { font-size:80px; font-weight:700; font-family:'JetBrains Mono',monospace; line-height:1; transition: color 0.6s; }
+  .vital-unit { font-size:24px; font-weight:400; color:var(--dim); margin-left:4px; }
+  .vital-range { font-size:12px; color:var(--dim); margin-top:8px; font-family:'JetBrains Mono',monospace; }
+  .vital-wave { flex:1; min-height:60px; margin-top:12px; }
+
+  /* Bottom panels */
+  .bottom-card { background:var(--surface); padding:24px 32px; display:flex; flex-direction:column; }
+  .bottom-card h3 { font-size:12px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-bottom:12px; }
+
+  /* Sleep timer */
+  .sleep-time { font-size:48px; font-weight:600; font-family:'JetBrains Mono',monospace; color:var(--blue); }
+  .sleep-sub { font-size:12px; color:var(--dim); margin-top:8px; }
+
+  /* Alert log */
+  .alert-log { flex:1; overflow-y:auto; }
+  .alert-entry { padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--dim); }
+  .alert-entry.warn { color:var(--amber); }
+  .alert-entry.critical { color:var(--red); }
+
+  /* Nodes bar */
+  .nodes-bar { padding:10px 32px; border-top:1px solid var(--border); display:flex; align-items:center; gap:20px; background:var(--surface); }
+  .node-chip { display:flex; align-items:center; gap:6px; font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--dim); }
+  .node-led { width:6px; height:6px; border-radius:50%; }
+  .node-led.on { background:var(--green); }
+  .node-led.off { background:#333; }
+  .nodes-label { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-right:auto; }
+
+  /* Apnea banner */
+  .apnea-banner { display:none; background:var(--red); color:white; text-align:center; padding:16px; font-size:20px; font-weight:700; letter-spacing:0.05em; animation: flash-banner 0.5s infinite; }
+  @keyframes flash-banner { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* Nerd mode toggle */
+  .nerd-toggle { background:none; border:1px solid var(--border); color:var(--dim); font-size:11px; font-family:'JetBrains Mono',monospace; padding:4px 12px; border-radius:4px; cursor:pointer; transition: all 0.3s; margin-left:16px; }
+  .nerd-toggle:hover { border-color:var(--cyan); color:var(--cyan); }
+  .nerd-toggle.active { border-color:var(--cyan); color:var(--cyan); background:rgba(34,211,238,0.1); }
+
+  /* Nerd panel */
+  .nerd-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:var(--bg); z-index:100; overflow-y:auto; }
+  .nerd-overlay.visible { display:block; }
+  .nerd-header { padding:16px 32px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:10; }
+  .nerd-header h2 { font-size:16px; font-weight:600; }
+  .nerd-header h2 em { font-style:normal; color:var(--cyan); }
+  .nerd-close { background:none; border:1px solid var(--border); color:var(--dim); font-size:12px; padding:6px 16px; border-radius:4px; cursor:pointer; }
+  .nerd-close:hover { border-color:var(--red); color:var(--red); }
+  .nerd-body { padding:24px 32px; display:flex; flex-direction:column; gap:24px; }
+
+  /* Stats grid */
+  .stats-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; }
+  .stat-box { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; }
+  .stat-label { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-bottom:6px; }
+  .stat-val { font-size:24px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+  .stat-sub { font-size:10px; color:var(--dim); margin-top:4px; }
+
+  /* History chart */
+  .history-section { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; }
+  .history-section h3 { font-size:12px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-bottom:12px; }
+  .history-canvas { width:100%; height:120px; }
+
+  /* Export buttons */
+  .export-row { display:flex; gap:12px; }
+  .export-btn { background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:12px; font-family:'JetBrains Mono',monospace; padding:10px 20px; border-radius:6px; cursor:pointer; transition: all 0.2s; }
+  .export-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+  .export-info { font-size:11px; color:var(--dim); margin-top:8px; }
+
+  /* Data table */
+  .data-table-wrap { max-height:300px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
+  .data-table { width:100%; border-collapse:collapse; font-size:11px; font-family:'JetBrains Mono',monospace; }
+  .data-table th { position:sticky; top:0; background:var(--surface); padding:8px 12px; text-align:left; color:var(--dim); font-weight:500; border-bottom:1px solid var(--border); }
+  .data-table td { padding:6px 12px; border-bottom:1px solid var(--border); color:var(--text); }
+  .data-table tr:hover td { background:rgba(255,255,255,0.02); }
+</style>
+</head>
+<body>
+
+<div class="apnea-banner" id="apneaBanner">BREATHING NOT DETECTED — CHECK BABY</div>
+
+<div class="header">
+  <div class="brand">My <em>Baby</em></div>
+  <div class="status-bar">
+    <div class="status-dot ok" id="statusDot"></div>
+    <div class="status-text" id="statusText" style="color:var(--green)">Baby Sleeping — All Normal</div>
+    <button class="nerd-toggle" id="themeToggle" onclick="toggleTheme()">Light</button>
+    <button class="nerd-toggle" id="nerdToggle" onclick="toggleNerd()">Nerd Mode</button>
+    <button class="nerd-toggle" onclick="location.href='setup.html'" style="margin-left:4px;">Setup</button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Breathing -->
+  <div class="vital-card">
+    <div class="vital-label"><span class="vital-icon">~</span> Breathing Rate</div>
+    <div class="vital-value" id="brVal" style="color:var(--breath)">—<span class="vital-unit">BPM</span></div>
+    <div class="vital-range" id="brRange">Normal newborn: 30–60 BPM</div>
+    <canvas class="vital-wave" id="brCanvas"></canvas>
+  </div>
+
+  <!-- Heart Rate -->
+  <div class="vital-card">
+    <div class="vital-label"><span class="vital-icon">♥</span> Heart Rate</div>
+    <div class="vital-value" id="hrVal" style="color:var(--heart)">—<span class="vital-unit">BPM</span></div>
+    <div class="vital-range" id="hrRange">Normal newborn: 120–160 BPM</div>
+    <canvas class="vital-wave" id="hrCanvas"></canvas>
+  </div>
+
+  <!-- Sleep Duration -->
+  <div class="bottom-card">
+    <h3>Sleep Session</h3>
+    <div class="sleep-time" id="sleepTime">00:00:00</div>
+    <div class="sleep-sub" id="sleepSub">Monitoring since —</div>
+    <div style="margin-top:16px;">
+      <div style="font-size:11px; color:var(--dim); margin-bottom:4px;">MOVEMENT</div>
+      <canvas id="motionCanvas" style="width:100%; height:40px;"></canvas>
+    </div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="bottom-card">
+    <h3>Event Log</h3>
+    <div class="alert-log" id="alertLog">
+      <div class="alert-entry">Waiting for sensor data...</div>
+    </div>
+  </div>
+</div>
+
+<div class="nodes-bar">
+  <div class="nodes-label">Crib Sensors</div>
+  <div id="nodesRow"></div>
+</div>
+
+<!-- Nerd Mode Overlay -->
+<div class="nerd-overlay" id="nerdOverlay">
+  <div class="nerd-header">
+    <h2>My <em>Baby</em> — Data Explorer</h2>
+    <button class="nerd-close" onclick="toggleNerd()">Close</button>
+  </div>
+  <div class="nerd-body">
+    <!-- Session stats -->
+    <div>
+      <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-bottom:12px;">Session Summary</h3>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- BR history chart -->
+    <div class="history-section">
+      <h3>Breathing Rate — Full Session</h3>
+      <canvas class="history-canvas" id="nerdBrCanvas"></canvas>
+    </div>
+
+    <!-- HR history chart -->
+    <div class="history-section">
+      <h3>Heart Rate — Full Session</h3>
+      <canvas class="history-canvas" id="nerdHrCanvas"></canvas>
+    </div>
+
+    <!-- Motion history chart -->
+    <div class="history-section">
+      <h3>Movement — Full Session</h3>
+      <canvas class="history-canvas" id="nerdMotionCanvas"></canvas>
+    </div>
+
+    <!-- Export -->
+    <div class="history-section">
+      <h3>Export Data</h3>
+      <div class="export-row">
+        <button class="export-btn" onclick="exportCSV()">Download CSV</button>
+        <button class="export-btn" onclick="exportJSON()">Download JSON</button>
+        <button class="export-btn" onclick="clearSession()">Clear Session</button>
+      </div>
+      <div class="export-info" id="exportInfo">0 readings captured</div>
+    </div>
+
+    <!-- Raw data table -->
+    <div class="history-section">
+      <h3>Raw Readings (last 200)</h3>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>BR (BPM)</th><th>HR (BPM)</th><th>Motion</th><th>Presence</th></tr></thead>
+          <tbody id="dataBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const NEWBORN_BR_LOW = 25, NEWBORN_BR_HIGH = 65;
+const NEWBORN_HR_LOW = 100, NEWBORN_HR_HIGH = 180;
+const APNEA_TIMEOUT_SEC = 15;
+
+const state = {
+  hr: null, br: null, smoothHR: null, smoothBR: null,
+  motion: 0, smoothMotion: 0, presence: false,
+  hrHistory: [], brHistory: [], motionHistory: [],
+  nodes: new Map(), alerts: [],
+  sleepStart: null, lastBreathTime: null, apneaActive: false
+};
+
+// ─── Theme ──────────────────────────────────────────────────
+let currentTheme = localStorage.getItem('mybaby-theme') || 'dark';
+document.documentElement.setAttribute('data-theme', currentTheme);
+updateThemeButton();
+
+function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  localStorage.setItem('mybaby-theme', currentTheme);
+  updateThemeButton();
+}
+
+function updateThemeButton() {
+  const btn = document.getElementById('themeToggle');
+  btn.textContent = currentTheme === 'dark' ? 'Light' : 'Dark';
+}
+
+function getWaveColors(type) {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    stroke: style.getPropertyValue(`--wave-stroke-${type}`).trim(),
+    fill: style.getPropertyValue(`--wave-fill-${type}`).trim(),
+  };
+}
+
+// ─── Session Data Store (persists in IndexedDB) ─────────────
+const sessionData = []; // {ts, br, hr, motion, presence}
+let nerdOpen = false;
+const DB_NAME = 'My BabyDB', STORE_NAME = 'sessions';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => { e.target.result.createObjectStore(STORE_NAME, { keyPath: 'ts' }); };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e);
+  });
+}
+
+async function saveReading(reading) {
+  sessionData.push(reading);
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(reading);
+  } catch(e) {}
+}
+
+async function loadSession() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAll();
+    return new Promise((resolve) => {
+      req.onsuccess = () => { resolve(req.result || []); };
+      req.onerror = () => resolve([]);
+    });
+  } catch(e) { return []; }
+}
+
+async function clearSession() {
+  sessionData.length = 0;
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+  } catch(e) {}
+  renderNerd();
+}
+
+// Load previous session on startup
+loadSession().then(data => { sessionData.push(...data); });
+
+function recordReading() {
+  const reading = {
+    ts: Date.now(),
+    time: new Date().toISOString(),
+    br: state.smoothBR ? +state.smoothBR.toFixed(2) : null,
+    hr: state.smoothHR ? +state.smoothHR.toFixed(1) : null,
+    motion: +state.smoothMotion.toFixed(3),
+    presence: state.presence
+  };
+  saveReading(reading);
+}
+
+// ─── Export ─────────────────────────────────────────────────
+function exportCSV() {
+  if (!sessionData.length) return;
+  const header = 'timestamp,time,breathing_bpm,heart_rate_bpm,motion_energy,presence\n';
+  const rows = sessionData.map(r =>
+    `${r.ts},${r.time},${r.br||''},${r.hr||''},${r.motion},${r.presence}`
+  ).join('\n');
+  download(header + rows, `babybreath-${dateStamp()}.csv`, 'text/csv');
+}
+
+function exportJSON() {
+  if (!sessionData.length) return;
+  const payload = {
+    session: { start: sessionData[0].time, end: sessionData[sessionData.length-1].time, readings: sessionData.length },
+    stats: computeStats(),
+    data: sessionData
+  };
+  download(JSON.stringify(payload, null, 2), `babybreath-${dateStamp()}.json`, 'application/json');
+}
+
+function download(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function dateStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+}
+
+// ─── Stats ──────────────────────────────────────────────────
+function computeStats() {
+  const brs = sessionData.filter(r => r.br).map(r => r.br);
+  const hrs = sessionData.filter(r => r.hr).map(r => r.hr);
+  const motions = sessionData.map(r => r.motion);
+  const calc = (arr) => {
+    if (!arr.length) return { min:0, max:0, avg:0 };
+    return { min: Math.min(...arr), max: Math.max(...arr), avg: arr.reduce((a,b)=>a+b,0)/arr.length };
+  };
+  return { br: calc(brs), hr: calc(hrs), motion: calc(motions), totalReadings: sessionData.length,
+    durationMin: sessionData.length > 1 ? ((sessionData[sessionData.length-1].ts - sessionData[0].ts)/60000).toFixed(1) : 0 };
+}
+
+// ─── Nerd Mode Toggle & Render ──────────────────────────────
+function toggleNerd() {
+  nerdOpen = !nerdOpen;
+  document.getElementById('nerdOverlay').classList.toggle('visible', nerdOpen);
+  document.getElementById('nerdToggle').classList.toggle('active', nerdOpen);
+  if (nerdOpen) renderNerd();
+}
+
+function renderNerd() {
+  const s = computeStats();
+
+  // Stats grid
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-box"><div class="stat-label">Duration</div><div class="stat-val">${s.durationMin}</div><div class="stat-sub">minutes</div></div>
+    <div class="stat-box"><div class="stat-label">Readings</div><div class="stat-val">${s.totalReadings}</div><div class="stat-sub">data points</div></div>
+    <div class="stat-box"><div class="stat-label">Avg BR</div><div class="stat-val" style="color:var(--breath)">${s.br.avg.toFixed(1)}</div><div class="stat-sub">${s.br.min.toFixed(1)} – ${s.br.max.toFixed(1)}</div></div>
+    <div class="stat-box"><div class="stat-label">Avg HR</div><div class="stat-val" style="color:var(--heart)">${s.hr.avg.toFixed(0)}</div><div class="stat-sub">${s.hr.min.toFixed(0)} – ${s.hr.max.toFixed(0)}</div></div>
+    <div class="stat-box"><div class="stat-label">Avg Motion</div><div class="stat-val">${s.motion.avg.toFixed(2)}</div><div class="stat-sub">${s.motion.min.toFixed(2)} – ${s.motion.max.toFixed(2)}</div></div>
+    <div class="stat-box"><div class="stat-label">Presence</div><div class="stat-val">${sessionData.filter(r=>r.presence).length}</div><div class="stat-sub">of ${s.totalReadings} readings</div></div>
+  `;
+
+  // Export info
+  document.getElementById('exportInfo').textContent = `${s.totalReadings} readings over ${s.durationMin} minutes — all stored locally on this device`;
+
+  // History charts
+  const brs = sessionData.map(r => r.br || 0);
+  const hrs = sessionData.map(r => r.hr || 0);
+  const motions = sessionData.map(r => r.motion);
+  const brC = getWaveColors('br'), hrC = getWaveColors('hr'), mC = getWaveColors('motion');
+  drawHistoryWave('nerdBrCanvas', brs, brC.stroke, brC.fill);
+  drawHistoryWave('nerdHrCanvas', hrs, hrC.stroke, hrC.fill);
+  drawHistoryWave('nerdMotionCanvas', motions, mC.stroke, mC.fill);
+
+  // Data table (last 200)
+  const recent = sessionData.slice(-200).reverse();
+  document.getElementById('dataBody').innerHTML = recent.map(r => `<tr>
+    <td>${new Date(r.ts).toLocaleTimeString('en-US',{hour12:false})}</td>
+    <td>${r.br ? r.br.toFixed(1) : '—'}</td>
+    <td>${r.hr ? r.hr.toFixed(0) : '—'}</td>
+    <td>${r.motion.toFixed(3)}</td>
+    <td>${r.presence ? 'Yes' : 'No'}</td>
+  </tr>`).join('');
+}
+
+function drawHistoryWave(canvasId, data, strokeColor, fillColor) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || data.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+  const valid = data.filter(v => v > 0);
+  if (valid.length < 2) return;
+  const minV = Math.min(...valid) * 0.9, maxV = Math.max(...valid) * 1.1;
+  const range = maxV - minV || 1, step = W / (data.length - 1);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) { const y = (H/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Fill
+  ctx.beginPath(); ctx.moveTo(0, H);
+  data.forEach((v, i) => { ctx.lineTo(i*step, H-((Math.max(v,minV)-minV)/range)*(H-6)); });
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fillStyle = fillColor; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => { const y = H-((Math.max(v,minV)-minV)/range)*(H-6); i===0 ? ctx.moveTo(0,y) : ctx.lineTo(i*step,y); });
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function ema(prev, curr, alpha) {
+  if (!prev || prev === 0) return curr;
+  if (!curr || curr === 0) return prev;
+  return prev + alpha * (curr - prev);
+}
+
+function addAlert(msg, level) {
+  const time = new Date().toLocaleTimeString('en-US', {hour12:false});
+  state.alerts.unshift({ time, msg, level });
+  if (state.alerts.length > 50) state.alerts.pop();
+}
+
+// ─── WebSocket ──────────────────────────────────────────────
+let ws, lastUpdate = 0;
+function connect() {
+  const host = location.hostname || 'localhost';
+  ws = new WebSocket(`ws://${host}:8765/ws/sensing`);
+  ws.onopen = () => { addAlert('Connected to sensing server', 'info'); };
+  ws.onclose = () => { setTimeout(connect, 2000); };
+  ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch(err) {} };
+}
+
+function onMsg(msg) {
+  if (msg.type !== 'sensing_update') return;
+  const now = Date.now();
+  if (now - lastUpdate < 500) return;
+  lastUpdate = now;
+
+  // Start sleep timer on first presence
+  if (!state.sleepStart && msg.classification && msg.classification.presence) {
+    state.sleepStart = now;
+    addAlert('Sleep monitoring started', 'info');
+  }
+
+  const f = msg.features || {};
+  state.motion = f.motion_band_power || 0;
+  state.smoothMotion = ema(state.smoothMotion, state.motion, 0.1);
+  state.motionHistory.push(state.smoothMotion);
+  if (state.motionHistory.length > 120) state.motionHistory.shift();
+
+  state.presence = msg.classification ? msg.classification.presence : false;
+
+  const v = msg.vital_signs || {};
+
+  // Breathing
+  if (v.breathing_rate_bpm && v.breathing_rate_bpm > 4 && v.breathing_rate_bpm < 80) {
+    state.br = v.breathing_rate_bpm;
+    state.smoothBR = ema(state.smoothBR, state.br, 0.06);
+    state.lastBreathTime = now;
+
+    // Clear apnea
+    if (state.apneaActive) {
+      state.apneaActive = false;
+      addAlert('Breathing resumed', 'info');
+    }
+  }
+
+  // Heart rate
+  if (v.heart_rate_bpm && v.heart_rate_bpm > 30 && v.heart_rate_bpm < 220) {
+    state.hr = v.heart_rate_bpm;
+    state.smoothHR = ema(state.smoothHR, state.hr, 0.06);
+  }
+
+  state.hrHistory.push(state.smoothHR || 0);
+  if (state.hrHistory.length > 120) state.hrHistory.shift();
+  state.brHistory.push(state.smoothBR || 0);
+  if (state.brHistory.length > 120) state.brHistory.shift();
+
+  if (msg.nodes) msg.nodes.forEach(n => state.nodes.set(n.node_id, { ...n, ts: now }));
+
+  // Check for apnea
+  if (state.lastBreathTime && (now - state.lastBreathTime) > APNEA_TIMEOUT_SEC * 1000 && state.presence) {
+    if (!state.apneaActive) {
+      state.apneaActive = true;
+      addAlert('APNEA ALERT — No breathing detected for ' + APNEA_TIMEOUT_SEC + 's', 'critical');
+    }
+  }
+
+  // Range alerts (check every update, but only alert once per threshold cross)
+  checkVitalAlerts();
+
+  // Record to session store
+  recordReading();
+
+  render();
+  if (nerdOpen) renderNerd();
+}
+
+let lastBRAlert = '', lastHRAlert = '';
+function checkVitalAlerts() {
+  if (state.smoothBR) {
+    const br = state.smoothBR;
+    let alert = '';
+    if (br < NEWBORN_BR_LOW) alert = 'low';
+    else if (br > NEWBORN_BR_HIGH) alert = 'high';
+    if (alert && alert !== lastBRAlert) {
+      addAlert(`Breathing ${alert}: ${br.toFixed(1)} BPM`, 'warn');
+    }
+    lastBRAlert = alert;
+  }
+  if (state.smoothHR) {
+    const hr = state.smoothHR;
+    let alert = '';
+    if (hr < NEWBORN_HR_LOW) alert = 'low';
+    else if (hr > NEWBORN_HR_HIGH) alert = 'high';
+    if (alert && alert !== lastHRAlert) {
+      addAlert(`Heart rate ${alert}: ${hr.toFixed(0)} BPM`, 'warn');
+    }
+    lastHRAlert = alert;
+  }
+}
+
+// Poll nodes
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/v1/nodes');
+    const d = await r.json();
+    const now = Date.now();
+    if (d.nodes) d.nodes.forEach(n => state.nodes.set(n.node_id, { ...n, ts: now - (n.last_seen_ms||0) }));
+    renderNodes();
+  } catch(e) {}
+}, 2000);
+
+// ─── Render ─────────────────────────────────────────────────
+function render() {
+  // Status
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  const banner = document.getElementById('apneaBanner');
+
+  if (state.apneaActive) {
+    dot.className = 'status-dot alert';
+    txt.textContent = 'APNEA — Check Baby Now';
+    txt.style.color = 'var(--red)';
+    banner.style.display = 'block';
+  } else if (!state.presence) {
+    dot.className = 'status-dot ok';
+    txt.textContent = 'No presence detected';
+    txt.style.color = 'var(--dim)';
+    banner.style.display = 'none';
+  } else {
+    dot.className = 'status-dot ok';
+    txt.textContent = 'Baby Sleeping — All Normal';
+    txt.style.color = 'var(--green)';
+    banner.style.display = 'none';
+  }
+
+  // Breathing
+  const brEl = document.getElementById('brVal');
+  if (state.smoothBR) {
+    const br = state.smoothBR;
+    brEl.innerHTML = `${br.toFixed(1)}<span class="vital-unit">BPM</span>`;
+    brEl.style.color = (br < NEWBORN_BR_LOW || br > NEWBORN_BR_HIGH) ? 'var(--amber)' : 'var(--breath)';
+    document.getElementById('brRange').textContent = br < NEWBORN_BR_LOW ? 'Below normal range' : br > NEWBORN_BR_HIGH ? 'Above normal range' : 'Within normal range';
+  }
+
+  // Heart rate
+  const hrEl = document.getElementById('hrVal');
+  if (state.smoothHR) {
+    const hr = state.smoothHR;
+    hrEl.innerHTML = `${hr.toFixed(0)}<span class="vital-unit">BPM</span>`;
+    hrEl.style.color = (hr < NEWBORN_HR_LOW || hr > NEWBORN_HR_HIGH) ? 'var(--amber)' : 'var(--heart)';
+    document.getElementById('hrRange').textContent = hr < NEWBORN_HR_LOW ? 'Below normal range' : hr > NEWBORN_HR_HIGH ? 'Above normal range' : 'Within normal range';
+  }
+
+  // Sleep timer
+  if (state.sleepStart) {
+    const elapsed = Math.floor((Date.now() - state.sleepStart) / 1000);
+    const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
+    const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('sleepTime').textContent = `${h}:${m}:${s}`;
+    document.getElementById('sleepSub').textContent = 'Since ' + new Date(state.sleepStart).toLocaleTimeString();
+  }
+
+  // Alert log
+  const log = document.getElementById('alertLog');
+  log.innerHTML = state.alerts.map(a =>
+    `<div class="alert-entry ${a.level}">${a.time}  ${a.msg}</div>`
+  ).join('') || '<div class="alert-entry">No events</div>';
+
+  renderNodes();
+  const brC = getWaveColors('br'), hrC = getWaveColors('hr'), mC = getWaveColors('motion');
+  drawWave('brCanvas', state.brHistory, brC.stroke, brC.fill);
+  drawWave('hrCanvas', state.hrHistory, hrC.stroke, hrC.fill);
+  drawWave('motionCanvas', state.motionHistory, mC.stroke, mC.fill);
+}
+
+function renderNodes() {
+  let html = '';
+  for (let id = 1; id <= 2; id++) {
+    const n = state.nodes.get(id);
+    const on = n && (n.status === 'active' || (Date.now() - (n.ts||0)) < 5000);
+    const label = id === 1 ? 'Left' : 'Right';
+    html += `<div class="node-chip"><div class="node-led ${on?'on':'off'}"></div>Crib ${label}</div>`;
+  }
+  document.getElementById('nodesRow').innerHTML = html;
+}
+
+function drawWave(canvasId, data, strokeColor, fillColor) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+  const valid = data.filter(v => v > 0);
+  if (valid.length < 3) return;
+  const minV = Math.min(...valid) * 0.9, maxV = Math.max(...valid) * 1.1;
+  const range = maxV - minV || 1, step = W / (data.length - 1);
+  ctx.beginPath(); ctx.moveTo(0, H);
+  data.forEach((v, i) => { ctx.lineTo(i * step, H - ((Math.max(v,minV)-minV)/range)*(H-4)); });
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fillStyle = fillColor; ctx.fill();
+  ctx.beginPath();
+  data.forEach((v, i) => { const y = H-((Math.max(v,minV)-minV)/range)*(H-4); i===0 ? ctx.moveTo(0,y) : ctx.lineTo(i*step,y); });
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; ctx.stroke();
+  const lastY = H-((Math.max(data[data.length-1],minV)-minV)/range)*(H-4);
+  ctx.beginPath(); ctx.arc((data.length-1)*step, lastY, 3, 0, Math.PI*2);
+  ctx.fillStyle = strokeColor; ctx.fill();
+}
+
+connect();
+// Update sleep timer every second
+setInterval(() => { if (state.sleepStart) render(); }, 1000);
+</script>
+</body>
+</html>
