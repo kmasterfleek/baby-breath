@@ -57,7 +57,7 @@ static const char *TAG = "disp_ili";
  * mirrored or upside-down on real hardware, flip these two flags. */
 #define LCD_MIRROR_X        false
 #define LCD_MIRROR_Y        false
-#define LCD_INVERT_COLOR    false
+#define LCD_INVERT_COLOR    true   /* this module shows inverted colours without it (verified on hardware) */
 
 /* Scratch buffer for fill_rect: LCD_H_RES x FILL_ROWS pixels (2560 bytes). */
 #define FILL_ROWS           4

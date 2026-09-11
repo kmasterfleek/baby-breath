@@ -35,7 +35,13 @@ static const char *TAG = "disp_heat";
 #define TITLE_Y         2
 #define REG_X           40
 #define REG_W           276
-#define REG_H           98
+#define REG_H           96
+#define BANDS           8               /* subcarrier groups per board */
+#define CELL_W          6               /* px per time cell */
+#define CELL_H          (REG_H / BANDS)
+#define CURSOR_W        2
+#define ACCUM_ROWS      5               /* rows averaged per cell (~1/3 s at 15 Hz) */
+#define LEVELS          5
 #define REG1_Y          30
 #define REG2_Y          140
 #define LABEL_X         4
@@ -79,6 +85,8 @@ typedef struct {
     TickType_t  last_rx;
     bool        waiting_drawn;  /* placeholder text currently shown */
     uint32_t    packets;
+    uint32_t    band_sum[BANDS];
+    int         acc_count;
 } heat_node_t;
 
 static heat_node_t s_nodes[2];
@@ -87,30 +95,40 @@ static bool        s_started = false;
 static uint32_t    s_dropped = 0;
 
 /* ---- Buffers (internal RAM, DMA-capable) ---- */
-static uint16_t s_lut[256];             /* blue->cyan->green->yellow->red */
-static uint16_t s_lut_dim[256];         /* same, quarter brightness (board inactive) */
-static uint16_t s_col[REG_H];           /* one data column */
-static uint16_t s_cursor_col[REG_H];    /* constant white column */
+static uint16_t s_lvl[LEVELS];          /* 5 discrete colours: much weaker .. much stronger */
+static uint16_t s_lvl_dim[LEVELS];      /* same, quarter brightness (board inactive) */
+static uint16_t s_col[REG_H * CELL_W];  /* one CELL_W-wide data column, row-major */
+static uint16_t s_cursor_col[REG_H * CURSOR_W]; /* white cursor column */
 static uint16_t s_glyph[FONT_W * FONT_MAX_SCALE * FONT_H * FONT_MAX_SCALE];
 
 /* ---- Colours (panel byte order) ---- */
 static uint16_t s_c_black, s_c_white, s_c_bg, s_c_frame, s_c_dim, s_c_label;
 
-/* ---- Colormap ---- */
+/* ---- Colormap: five weather-like steps ---- */
 static void build_lut(void)
 {
-    static const uint8_t stops[5][3] = {
-        {0, 0, 255}, {0, 255, 255}, {0, 255, 0}, {255, 255, 0}, {255, 0, 0},
+    static const uint8_t c[LEVELS][3] = {
+        {24, 48, 170},    /* much weaker than usual  : deep blue */
+        {70, 130, 225},   /* weaker                  : blue */
+        {36, 44, 58},     /* about usual             : calm slate */
+        {240, 140, 30},   /* stronger                : orange */
+        {225, 40, 30},    /* much stronger           : red */
     };
-    for (int i = 0; i < 256; i++) {
-        int seg = (i * 4) / 256;                 /* 0..3 */
-        int f   = (i * 4) % 256;                 /* 0..255 within segment */
-        int r = stops[seg][0] + ((stops[seg + 1][0] - stops[seg][0]) * f) / 255;
-        int g = stops[seg][1] + ((stops[seg + 1][1] - stops[seg][1]) * f) / 255;
-        int b = stops[seg][2] + ((stops[seg + 1][2] - stops[seg][2]) * f) / 255;
-        s_lut[i]     = display_hal_rgb565((uint8_t)r, (uint8_t)g, (uint8_t)b);
-        s_lut_dim[i] = display_hal_rgb565((uint8_t)(r >> 2), (uint8_t)(g >> 2), (uint8_t)(b >> 2));
+    for (int i = 0; i < LEVELS; i++) {
+        s_lvl[i]     = display_hal_rgb565(c[i][0], c[i][1], c[i][2]);
+        s_lvl_dim[i] = display_hal_rgb565(c[i][0] >> 2, c[i][1] >> 2, c[i][2] >> 2);
     }
+}
+
+/* Map a band mean (0..255, 128 = usual) onto one of LEVELS steps. */
+static int level_of(int v)
+{
+    int d = v - 128;
+    if (d <= -96) return 0;
+    if (d <= -32) return 1;
+    if (d <   32) return 2;
+    if (d <   96) return 3;
+    return 4;
 }
 
 /* ---- Text ---- */
@@ -157,6 +175,8 @@ static void clear_region(heat_node_t *n)
 {
     display_hal_fill_rect(REG_X, n->y, REG_W, REG_H, s_c_bg);
     n->cursor = 0;
+    n->acc_count = 0;
+    memset(n->band_sum, 0, sizeof(n->band_sum));
 }
 
 static void draw_waiting(heat_node_t *n)
@@ -190,21 +210,37 @@ static void draw_chrome(void)
     }
 }
 
-/* Render one packet payload as a column and advance the cursor. */
+/* Accumulate a packet into the band averages; every ACCUM_ROWS packets draw one
+ * CELL_W-wide column of BANDS cells and advance the cursor. */
 static void draw_packet(heat_node_t *n, const uint8_t *bins, int n_bins, bool active)
 {
     if (n->waiting_drawn) {
         clear_region(n);
         n->waiting_drawn = false;
     }
-    const uint16_t *lut = active ? s_lut : s_lut_dim;
-    for (int r = 0; r < REG_H; r++) {
-        int bin = ((REG_H - 1 - r) * n_bins) / REG_H;   /* bin 0 at the bottom */
-        s_col[r] = lut[bins[bin]];
+    for (int b = 0; b < BANDS; b++) {
+        int lo = (b * n_bins) / BANDS, hi = ((b + 1) * n_bins) / BANDS;
+        if (hi <= lo) hi = lo + 1;
+        uint32_t sum = 0;
+        for (int i = lo; i < hi && i < n_bins; i++) sum += bins[i];
+        n->band_sum[b] += sum / (uint32_t)(hi - lo);
     }
-    display_hal_draw_bitmap(REG_X + n->cursor, n->y, 1, REG_H, s_col);
-    n->cursor = (n->cursor + 1) % REG_W;
-    display_hal_draw_bitmap(REG_X + n->cursor, n->y, 1, REG_H, s_cursor_col);
+    if (++n->acc_count < ACCUM_ROWS) return;
+
+    const uint16_t *pal = active ? s_lvl : s_lvl_dim;
+    for (int b = 0; b < BANDS; b++) {
+        uint16_t colour = pal[level_of((int)(n->band_sum[b] / (uint32_t)n->acc_count))];
+        int row0 = (BANDS - 1 - b) * CELL_H;                 /* band 0 at the bottom */
+        for (int r = row0; r < row0 + CELL_H; r++)
+            for (int x = 0; x < CELL_W; x++) s_col[r * CELL_W + x] = colour;
+    }
+    n->acc_count = 0;
+    memset(n->band_sum, 0, sizeof(n->band_sum));
+
+    display_hal_draw_bitmap(REG_X + n->cursor, n->y, CELL_W, REG_H, s_col);
+    n->cursor = (n->cursor + CELL_W) % (REG_W - (REG_W % CELL_W));
+    if (n->cursor + CURSOR_W <= REG_W)
+        display_hal_draw_bitmap(REG_X + n->cursor, n->y, CURSOR_W, REG_H, s_cursor_col);
 }
 
 /* ---- UDP receive task ---- */
@@ -275,7 +311,7 @@ esp_err_t display_heat_init(void)
     s_c_dim   = display_hal_rgb565(96, 96, 96);
     s_c_label = display_hal_rgb565(0, 212, 255);
     build_lut();
-    for (int r = 0; r < REG_H; r++) s_cursor_col[r] = s_c_white;
+    for (int i = 0; i < REG_H * CURSOR_W; i++) s_cursor_col[i] = s_c_white;
 
     memset(s_nodes, 0, sizeof(s_nodes));
     s_nodes[0].y = REG1_Y;
@@ -283,7 +319,7 @@ esp_err_t display_heat_init(void)
     draw_chrome();
 
     s_ready = true;
-    ESP_LOGI(TAG, "Heat display ready (2 x %dx%d strips)", REG_W, REG_H);
+    ESP_LOGI(TAG, "Heat display ready (2 x %dx%d mosaics, %d bands, %d-px cells)", REG_W, REG_H, BANDS, CELL_W);
     return ESP_OK;
 }
 
