@@ -1,15 +1,17 @@
 # Baby Breath
 
 **Teach your house to feel you walk.**
-*An Omega School project · Cohort One · the second hatchling's first job*
+*An Omega School project · Cohort One · the first perceptual literacy activity*
 
 ---
 
 Your home WiFi already fills every room with radio waves. When someone walks through a room, the waves bend around them, the way water bends around a hand. Two small boards from your welcome box listen to that bending. A program on your laptop turns it into a meter that moves when you move.
 
-No camera. No microphone. No cloud, no account, nothing leaves your table. The intelligence lives in a box you can open.
+No camera. No microphone. No cloud, no account, nothing leaves your table. The AI is private and local: it runs on the two boards and your laptop, and you can open every part of it.
 
-This is the same literacy Polynesian navigators had when they read ocean swells through the hull of a canoe, and the same one the Inca used to run an economy on knotted string. You are reading waves. The difference is that these waves are radio, and your children get to watch the reading happen.
+This is the same literacy Polynesian navigators had when they read ocean swells through the hull of a canoe, and the same one the Inca used to run an economy on knotted string. You are reading waves. The difference is that these waves are radio, and your children get to watch the reading happen. It is the first thing Cohort One does, because it shows in one afternoon what the whole school is about: your actual physical world holds far more than your eyes report, and you can learn to read it.
+
+The same two boards will come back later in the cohort, pointed at something that does not walk: the root systems of plants, and how they build and communicate underground. Same radio, same boards, same reading. Different world.
 
 You don't teach this. You host it. Claude Code is your lab partner and runs every step with you. Kunal teaches the live class.
 
