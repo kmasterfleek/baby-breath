@@ -1,11 +1,14 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, powerSaveBlocker } = require('electron');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
-const net = require('net');
 
 let mainWindow;
 let serverProcess = null;
+let quitting = false;          // suppress auto-restart during shutdown
+let restartAttempts = 0;
+let restartTimer = null;
+let powerBlockerId = null;
 const SERVER_HTTP_PORT = 8080;
 const SERVER_WS_PORT = 8765;
 const SERVER_UDP_PORT = 5005;
@@ -24,19 +27,29 @@ function getServerBinary() {
 }
 
 function getUIPath() {
+  // In packaged app the UI must live on real disk (extraResources) — the Rust
+  // server is a separate process and cannot read files inside app.asar.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'ui');
+  }
   const devPath = path.join(__dirname, 'ui');
   if (fs.existsSync(devPath)) return devPath;
   return path.join(__dirname, '..', 'ui');
 }
 
 // ─── Server Management ──────────────────────────────────────
-function isPortFree(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => { server.close(); resolve(true); });
-    server.listen(port, '127.0.0.1');
-  });
+// A bind-probe (net.listen) is unreliable on macOS: SO_REUSEADDR lets a
+// 127.0.0.1 bind succeed while another process holds *:port. Probe /health
+// over HTTP instead — an answer is definitive proof a server is up.
+async function isServerResponding() {
+  try {
+    const resp = await fetch(`http://127.0.0.1:${SERVER_HTTP_PORT}/health`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    return resp.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function startServer() {
@@ -47,9 +60,11 @@ async function startServer() {
   }
 
   // Check if already running
-  const free = await isPortFree(SERVER_HTTP_PORT);
-  if (!free) {
+  if (await isServerResponding()) {
     console.log('Server already running on port', SERVER_HTTP_PORT);
+    if (powerBlockerId === null) {
+      powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    }
     return true;
   }
 
@@ -80,23 +95,54 @@ async function startServer() {
   serverProcess.on('exit', (code) => {
     console.log('Server exited with code', code);
     serverProcess = null;
+    // Overnight monitoring must survive a server crash: respawn with backoff
+    // unless the app is quitting (an overnight recording died this way once).
+    if (!quitting) {
+      const delay = Math.min(30000, 2000 * Math.pow(2, restartAttempts));
+      restartAttempts++;
+      console.log(`Server crashed — restarting in ${delay / 1000}s (attempt ${restartAttempts})`);
+      restartTimer = setTimeout(async () => {
+        restartTimer = null;
+        const ok = await startServer();
+        if (ok) restartAttempts = 0;
+      }, delay);
+    }
   });
 
-  // Wait for server to be ready
-  for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 200));
-    const ready = !(await isPortFree(SERVER_HTTP_PORT));
-    if (ready) {
+  // Wait for server to be ready. Startup scans the recordings dir, which can
+  // take a while on slow disks, so allow a generous window (the loop bails
+  // early if the process dies).
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if (serverProcess === null) {
+      console.error('Server process exited during startup');
+      return false;
+    }
+    if (await isServerResponding()) {
       console.log('Server ready');
+      // Monitoring runs overnight — keep the system from sleeping while the
+      // server is up (display may still sleep).
+      if (powerBlockerId === null) {
+        powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+        console.log('Keep-awake enabled (powerSaveBlocker', powerBlockerId + ')');
+      }
       return true;
     }
   }
 
-  console.error('Server failed to start within 6 seconds');
+  console.error('Server failed to start within 60 seconds');
   return false;
 }
 
 function stopServer() {
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+  if (powerBlockerId !== null) {
+    powerSaveBlocker.stop(powerBlockerId);
+    powerBlockerId = null;
+  }
   if (serverProcess) {
     console.log('Stopping server...');
     serverProcess.kill('SIGTERM');
@@ -173,11 +219,18 @@ async function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  stopServer();
-  app.quit();
+  // On macOS, closing the window must NOT stop monitoring — the server (and
+  // any recording) keeps running in the background; the dock icon reopens the
+  // window. Quit explicitly with Cmd+Q to stop everything.
+  if (process.platform !== 'darwin') {
+    quitting = true;
+    stopServer();
+    app.quit();
+  }
 });
 
 app.on('before-quit', () => {
+  quitting = true;
   stopServer();
 });
 
@@ -216,8 +269,8 @@ function findSerialPorts() {
 }
 
 ipcMain.handle('get-server-status', async () => {
-  const free = await isPortFree(SERVER_HTTP_PORT);
-  return { running: !free, port: SERVER_HTTP_PORT };
+  const running = await isServerResponding();
+  return { running, port: SERVER_HTTP_PORT };
 });
 
 ipcMain.handle('get-local-ip', async () => {
@@ -228,8 +281,14 @@ ipcMain.handle('list-serial-ports', async () => {
   return findSerialPorts();
 });
 
+function getProvisionScript() {
+  const devPath = path.join(__dirname, '..', 'firmware', 'esp32-csi-node', 'provision.py');
+  if (fs.existsSync(devPath)) return devPath;
+  return path.join(process.resourcesPath, 'firmware', 'provision.py');
+}
+
 ipcMain.handle('provision-board', async (event, { port, ssid, password, nodeId }) => {
-  const provisionScript = path.join(__dirname, '..', 'firmware', 'esp32-csi-node', 'provision.py');
+  const provisionScript = getProvisionScript();
   const localIP = getLocalIP();
 
   // Use ESP-IDF's Python env if available, else system python3

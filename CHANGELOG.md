@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **"My Baby" app is now packageable into a macOS installer (unsigned)** — Closed the `bin/` packaging gap: `sensing-server` is bundled at `babybreath-app/bin/sensing-server`, and `electron-builder` produces a working `My Baby.app` + DMG. The UI and `provision.py` ship as `extraResources` on real disk (the Rust server child process cannot read inside `app.asar`). Build is unsigned for now (`mac.identity: null`) — notarization needs an Apple Developer ID before beta.
+- **Resilient overnight monitoring** — The app now auto-restarts the sensing-server with exponential backoff if it crashes (the failure mode that killed the first overnight recording), holds a `powerSaveBlocker` so the Mac can't sleep mid-session, and on macOS keeps the server + monitoring running when the window is closed (quit explicitly with Cmd+Q to stop).
+- **Setup wizard verifies sensors actually come online** — After USB provisioning, the wizard polls `/api/v1/nodes` for up to 75 s and only advances when sensors are streaming; on timeout it explains the three real-world causes (wrong password, 5 GHz-only SSID, wrong network) instead of failing silently. The broken "Wireless (Bluetooth)" tab was removed — the firmware has no BLE provisioning service, so that path could never work.
+- **Safety disclaimer in the UI** — Both the setup wizard and the monitor now carry a persistent "not a medical device" disclaimer (legally load-bearing for a baby-adjacent product).
+
+### Fixed (tests)
+- `field_model::tests::test_estimate_occupancy_noise_only` failed on every `--no-default-features` run: `estimate_occupancy()` is a `NotCalibrated` stub without the `eigenvalue` (BLAS) feature, but the test wasn't feature-gated. Now `#[cfg(feature = "eigenvalue")]`. Workspace suite (excluding the Tauri desktop crate, whose build script chokes on exFAT AppleDouble files): 1,053+ passed, 0 failed.
+
+### Performance
+- **Server startup no longer reads whole recordings into RAM** — `scan_recording_files()` used `read_to_string()` to count frames, which loaded multi-GB overnight captures into memory and blocked startup for minutes. Files >32 MB now get a frame estimate from a 1 MB sample (avg line length); startup with an 8.3 GB recording dropped from minutes to seconds. AppleDouble `._*` junk files (exFAT) are also filtered from recording/model listings.
+
 ### Fixed
+- **Packaged app server detection on macOS** — `main.js` probed port 8080 with a `net.listen` bind check, which SO_REUSEADDR makes unreliable on macOS (a `127.0.0.1` bind succeeds while another process holds `*:8080`), so the app could spawn a doomed duplicate server and report "failed to start". Replaced with a definitive HTTP `GET /health` probe, and extended the startup wait 6s → 30s (server startup scans the recordings dir, which can take 10s+ with large captures).
 - **ESP32 firmware now honors the provisioned `node_id` from NVS (multi-node fix)** — The prebuilt `esp32-csi-node.bin` ignored the NVS `node_id`, so every board booted as node 1 and collided into a single node on the sensing-server (`/api/v1/nodes` showed `total:1` regardless of how many boards were online). Rebuilt from current source — `main/nvs_config.c` correctly reads `node_id`/`tdm_slot`/`tdm_nodes`. Verified on hardware: two ESP32-S3 nodes now report as node 1 and node 2 with cross-viewpoint fusion. Reflashing preserves the NVS partition (write `0x0/0x8000/0xf000/0x20000`, not `0x9000`), so **no re-provisioning is required**.
 
 ### Changed

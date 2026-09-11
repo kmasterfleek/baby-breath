@@ -2855,6 +2855,9 @@ fn scan_model_files() -> Vec<serde_json::Value> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
+            if is_appledouble(&path) {
+                continue;
+            }
             if path.extension().and_then(|e| e.to_str()) == Some("rvf") {
                 let name = path.file_stem()
                     .and_then(|s| s.to_str())
@@ -3086,6 +3089,9 @@ fn scan_recording_files() -> Vec<serde_json::Value> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
+            if is_appledouble(&path) {
+                continue;
+            }
             if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
                 let name = path.file_stem()
                     .and_then(|s| s.to_str())
@@ -3098,9 +3104,7 @@ fn scan_recording_files() -> Vec<serde_json::Value> {
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
                 // Count lines (frames) — approximate for large files
-                let frame_count = std::fs::read_to_string(&path)
-                    .map(|s| s.lines().count())
-                    .unwrap_or(0);
+                let frame_count = count_recording_frames(&path, size);
                 recordings.push(serde_json::json!({
                     "id": name,
                     "name": name,
@@ -3114,6 +3118,39 @@ fn scan_recording_files() -> Vec<serde_json::Value> {
         }
     }
     recordings
+}
+
+/// macOS AppleDouble metadata files ("._name") litter non-APFS volumes like
+/// exFAT and would otherwise show up as bogus recordings/models.
+fn is_appledouble(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("._"))
+}
+
+/// Frame (line) count for a recording. Overnight captures reach many GB, and
+/// this runs during server startup — so only small files get an exact count;
+/// large ones are estimated from the average line length of a 1 MB sample.
+fn count_recording_frames(path: &std::path::Path, size: u64) -> usize {
+    use std::io::{BufRead, Read};
+    const EXACT_LIMIT: u64 = 32 * 1024 * 1024; // 32 MB
+
+    let Ok(file) = std::fs::File::open(path) else { return 0 };
+
+    if size <= EXACT_LIMIT {
+        return std::io::BufReader::new(file).lines().count();
+    }
+
+    let mut sample = Vec::with_capacity(1024 * 1024);
+    if file.take(1024 * 1024).read_to_end(&mut sample).is_err() {
+        return 0;
+    }
+    let lines = sample.iter().filter(|&&b| b == b'\n').count();
+    if lines == 0 {
+        return 0;
+    }
+    let avg_line_len = sample.len() / lines;
+    (size as usize) / avg_line_len.max(1)
 }
 
 // ── Training Endpoints ──────────────────────────────────────────────────────

@@ -18,19 +18,28 @@
     "appId": "com.babybreath.app",
     "productName": "My Baby",
     "mac": {
-      "category": "public.app-category.healthcare-fitness"
+      "category": "public.app-category.healthcare-fitness",
+      "identity": null
     },
     "files": [
       "main.js",
       "preload.js",
-      "ui/**/*",
-      "bin/**/*"
+      "ui/**/*"
     ],
     "extraResources": [
       {
         "from": "bin/",
         "to": "bin/",
         "filter": ["**/*"]
+      },
+      {
+        "from": "ui/",
+        "to": "ui/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../firmware/esp32-csi-node/provision.py",
+        "to": "firmware/provision.py"
       }
     ]
   }

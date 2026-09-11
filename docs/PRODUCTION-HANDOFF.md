@@ -169,10 +169,10 @@ Two ways:
 
 ## 9. Prioritized engineering backlog (to reach Phase C)
 
-1. **Package the app** (bin/ + electron-builder + signing) — blocks everything.  ← start here
-2. **Resilient headless server service** + keep-awake (fix the crash-kills-recording failure mode).
-3. **Provisioning UX**: kill broken BLE tab, mDNS discovery instead of hardcoded IP, clear failure messages.
-4. **Safety disclaimer in the UI** (setup + monitor).
+1. ~~**Package the app** (bin/ + electron-builder + signing)~~ — **DONE 2026-07-05** (unsigned DMG builds + verified; signing/notarization still needs an Apple Developer ID). See `babybreath-app/README.md` §"Build a distributable".
+2. ~~**Resilient headless server service** + keep-awake~~ — **DONE 2026-07-05** (auto-restart with backoff, powerSaveBlocker, window-close no longer stops monitoring on macOS). Also fixed: server startup read whole recordings into RAM to count frames — now estimated, startup is seconds not minutes.
+3. **Provisioning UX** — **PARTLY DONE 2026-07-05**: broken BLE tab removed, post-provision online-check with clear failure messages added. Remaining: mDNS/`.local` discovery instead of hardcoded IP (firmware change, needs hardware validation).
+4. ~~**Safety disclaimer in the UI** (setup + monitor)~~ — **DONE 2026-07-05.**
 5. **Appliance evaluation** (Pi "Cognitum Seed") so testers don't need a laptop running all night.
 6. **Tier-0 raw-CSI path** for calibration + sleep-position data (optional for first beta, needed for the "study poses" pitch).
 7. **Rebuild + validate the 4 MB firmware variant** (only if SuperMini is in the kit).

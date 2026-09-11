@@ -1232,6 +1232,8 @@ mod tests {
         }
     }
 
+    // estimate_occupancy is a NotCalibrated stub without the eigenvalue (BLAS) feature
+    #[cfg(feature = "eigenvalue")]
     #[test]
     fn test_estimate_occupancy_noise_only() {
         let config = FieldModelConfig {

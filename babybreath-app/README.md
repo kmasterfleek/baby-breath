@@ -86,10 +86,24 @@ npm install
 npm start          # launches Electron; auto-spawns the sensing-server
 ```
 
-- **No boards yet, no data?** The app opens the **setup wizard**. In Step 2, click the **"USB Cable"**
-  toggle (the "Wireless/Bluetooth" path is not supported by the current sensing firmware), enter your
-  2.4 GHz WiFi, and it provisions the first two connected boards as node 1 / node 2.
+- **No boards yet, no data?** The app opens the **setup wizard**: enter your 2.4 GHz WiFi, plug both
+  boards in via USB, and it provisions them as node 1 / node 2, then waits until they actually come
+  online over WiFi before declaring success (surfacing wrong-password / 5 GHz-only failures).
 - **Boards already provisioned?** They reconnect automatically and the monitor loads.
+
+### Build a distributable (macOS, unsigned)
+```bash
+cd babybreath-app
+mkdir -p bin && cp ../rust-port/wifi-densepose-rs/target/release/sensing-server bin/
+npx electron-builder -c.directories.output="$HOME/babybreath-dist"   # DMG + .app
+```
+- The server binary, `ui/`, and `provision.py` are bundled as `extraResources` (real files on
+  disk — the Rust server child process can't read inside `app.asar`).
+- **Output must go to a local APFS disk.** Building into `dist/` on an exFAT volume (like the
+  LaCie drive this repo lives on) corrupts the asar during integrity checks — hence the
+  `-c.directories.output` override.
+- The build is **unsigned** (`mac.identity: null`): recipients must right-click → Open the first
+  time. Signing/notarization needs an Apple Developer ID (pre-beta TODO).
 
 ### Run with no hardware (simulation)
 The server supports a synthetic source. Run it standalone:
@@ -180,9 +194,11 @@ babybreath-app/           ← THIS app (Electron "My Baby")
 **Known issues**
 - **4MB SuperMini firmware** (`esp32-csi-node-4mb.bin`) still carries an older `node_id` bug and has
   not been rebuilt/validated; the current ~1.3 MB app may not fit its smaller partition without tuning.
-- **App packaging gap:** `package.json` expects to bundle the server at `bin/sensing-server`, but no
-  `bin/` directory exists yet — the app runs in **dev mode** (finds the binary in the workspace) but
-  won't `npm run dist` into a distributable until the binary is copied into `bin/`.
+- **Unsigned build:** the packaged app is not code-signed or notarized (no Apple Developer ID yet).
+  Gatekeeper will warn on first launch — right-click → Open. Must be fixed before public beta.
+- **Packaged provisioning still needs ESP-IDF:** the bundled `provision.py` shells out to the
+  ESP-IDF Python env (`~/.espressif/...`) on the host — a fresh machine without ESP-IDF cannot
+  provision boards from the packaged app. Ship pre-provisioned boards, or bundle esptool, for beta.
 - **DHCP caveat:** nodes have the server's IP baked into NVS. If the host machine's LAN IP changes,
   UDP won't arrive ("no data") — re-run the setup wizard (auto-detects current IP) or reserve a static IP.
 - Confidence/signal-quality start low until a **room baseline** is captured and buffers fill (~30–60 s).
@@ -191,7 +207,9 @@ babybreath-app/           ← THIS app (Electron "My Baby")
 - Guided **calibration wizard** in the consumer app (quiet baseline → guided breathing anchors),
   wiring the existing `/calibration` + `/recording` endpoints into a parent-friendly "Set up this room" flow.
 - Train small specialized RuVector models per vital (breathing / heartbeat / restlessness / posture).
-- Rebuild + validate the 4MB firmware variant; close the packaging gap for a shippable installer.
+- Rebuild + validate the 4MB firmware variant.
+- **mDNS/`.local` host discovery** in firmware to replace the NVS-baked target IP (kills the DHCP caveat).
+- Sign + notarize the installer (needs an Apple Developer ID).
 
 ---
 

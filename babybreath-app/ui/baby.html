@@ -77,6 +77,9 @@
   .apnea-banner { display:none; background:var(--red); color:white; text-align:center; padding:16px; font-size:20px; font-weight:700; letter-spacing:0.05em; animation: flash-banner 0.5s infinite; }
   @keyframes flash-banner { 0%,100%{opacity:1} 50%{opacity:0.6} }
 
+  /* Safety disclaimer */
+  .disclaimer-bar { padding:8px 32px; border-top:1px solid var(--border); background:var(--surface); font-size:10px; color:var(--dim); text-align:center; line-height:1.4; }
+
   /* Nerd mode toggle */
   .nerd-toggle { background:none; border:1px solid var(--border); color:var(--dim); font-size:11px; font-family:'JetBrains Mono',monospace; padding:4px 12px; border-radius:4px; cursor:pointer; transition: all 0.3s; margin-left:16px; }
   .nerd-toggle:hover { border-color:var(--cyan); color:var(--cyan); }
@@ -173,6 +176,11 @@
 <div class="nodes-bar">
   <div class="nodes-label">Crib Sensors</div>
   <div id="nodesRow"></div>
+</div>
+
+<div class="disclaimer-bar">
+  <strong>Not a medical device.</strong> My Baby is a sleep-insight tool for curious parents — readings are estimates.
+  It cannot reliably detect breathing emergencies and must never replace safe-sleep practices, adult supervision, or medical monitoring.
 </div>
 
 <!-- Nerd Mode Overlay -->

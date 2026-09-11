@@ -48,16 +48,13 @@
   .sensor-name { font-size:13px; font-weight:500; }
   .sensor-status { margin-left:auto; font-size:11px; font-family:monospace; }
 
-  .method-toggle { display:flex; gap:8px; margin-bottom:16px; }
-  .method-btn { padding:6px 14px; border-radius:4px; font-size:12px; border:1px solid var(--border); background:none; color:var(--dim); cursor:pointer; }
-  .method-btn.active { border-color:var(--cyan); color:var(--cyan); background:rgba(103,232,249,0.1); }
 </style>
 </head>
 <body>
 
 <div class="setup-card">
   <h1>My <em>Baby</em></h1>
-  <div class="subtitle">Let's set up your crib sensors. No cables needed — we'll connect wirelessly.</div>
+  <div class="subtitle">Let's set up your crib sensors. You'll plug them into this computer once, then they work wirelessly.</div>
 
   <!-- Step 1: WiFi -->
   <div class="step active" id="step1">
@@ -67,6 +64,7 @@
     </div>
     <div class="step-body">
       The sensors need to join your WiFi to send data to this computer.
+      <strong>Use a 2.4 GHz network</strong> — the sensors can't see 5 GHz-only networks.
       <input type="text" id="ssid" placeholder="WiFi network name">
       <input type="password" id="pass" placeholder="WiFi password" style="margin-top:6px;">
     </div>
@@ -76,14 +74,10 @@
   <div class="step" id="step2">
     <div class="step-header">
       <span class="step-num">2</span>
-      <span class="step-label">Find &amp; configure sensors</span>
+      <span class="step-label">Connect &amp; configure sensors</span>
     </div>
     <div class="step-body">
-      <div class="method-toggle">
-        <button class="method-btn active" id="bleBtn" onclick="setMethod('ble')">Wireless (Bluetooth)</button>
-        <button class="method-btn" id="usbBtn" onclick="setMethod('usb')">USB Cable</button>
-      </div>
-      <div id="sensorArea">Power on both sensors. We'll find them automatically.</div>
+      <div id="sensorArea">Plug both sensors into this computer with USB cables.</div>
       <div id="sensorList"></div>
     </div>
   </div>
@@ -98,28 +92,24 @@
   </div>
 
   <button class="btn btn-primary" id="btn" onclick="go()">Next</button>
+  <button class="btn btn-secondary" id="btnSkip" onclick="skipCheck()" style="display:none;">Continue Anyway</button>
   <div class="msg" id="msg"></div>
+
+  <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--border); font-size:11px; color:var(--dim); line-height:1.5;">
+    <strong>Not a medical device.</strong> My Baby is a sleep-insight tool for curious parents.
+    It cannot detect health emergencies and must never replace safe-sleep practices or adult supervision.
+  </div>
 </div>
 
 <script>
 let currentStep = 1;
-let method = 'ble'; // 'ble' or 'usb'
-let sensors = []; // {name, device/port, provisioned}
+let sensors = []; // {name, port, provisioned}
 let localIP = '';
 
 function show(text, level) {
   const el = document.getElementById('msg');
   el.textContent = text;
   el.className = 'msg ' + level;
-}
-
-function setMethod(m) {
-  method = m;
-  document.getElementById('bleBtn').classList.toggle('active', m === 'ble');
-  document.getElementById('usbBtn').classList.toggle('active', m === 'usb');
-  document.getElementById('sensorArea').textContent = m === 'ble'
-    ? 'Power on both sensors. We\'ll find them via Bluetooth.'
-    : 'Plug both sensors into this computer via USB.';
 }
 
 function setStep(n) {
@@ -155,7 +145,7 @@ async function go() {
     }
 
     setStep(2);
-    btn.textContent = method === 'ble' ? 'Scan for Sensors' : 'Set Up Sensors';
+    btn.textContent = 'Set Up Sensors';
     show(`WiFi: ${ssid}. Your computer is at ${localIP || 'detecting...'}`, 'info');
 
   } else if (currentStep === 2) {
@@ -163,11 +153,7 @@ async function go() {
     const pass = document.getElementById('pass').value;
     btn.disabled = true;
 
-    if (method === 'ble') {
-      await provisionBLE(ssid, pass);
-    } else {
-      await provisionUSB(ssid, pass);
-    }
+    await provisionUSB(ssid, pass);
 
   } else if (currentStep === 3) {
     if (window.babybreath) {
@@ -178,66 +164,7 @@ async function go() {
   }
 }
 
-// ─── BLE Provisioning ───────────────────────────────────────
-async function provisionBLE(ssid, pass) {
-  const btn = document.getElementById('btn');
-  btn.textContent = 'Scanning...';
-  show('Looking for My Baby sensors via Bluetooth...', 'info');
-
-  try {
-    // Scan for first sensor
-    for (let nodeId = 1; nodeId <= 2; nodeId++) {
-      show(`Searching for Sensor ${nodeId}... Click the Bluetooth popup to select your sensor.`, 'info');
-
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'MYBABY_' }],
-        optionalServices: ['0000ffff-0000-1000-8000-00805f9b34fb'] // ESP provisioning service
-      });
-
-      sensors.push({ name: device.name || 'Sensor', device, provisioned: false, busy: true });
-      renderSensors();
-
-      show(`Connected to ${device.name}. Sending WiFi credentials...`, 'info');
-
-      // Connect and send credentials
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService('0000ffff-0000-1000-8000-00805f9b34fb');
-
-      // Write SSID
-      const ssidChar = await service.getCharacteristic('0000ff01-0000-1000-8000-00805f9b34fb');
-      await ssidChar.writeValue(new TextEncoder().encode(ssid));
-
-      // Write password
-      const passChar = await service.getCharacteristic('0000ff02-0000-1000-8000-00805f9b34fb');
-      await passChar.writeValue(new TextEncoder().encode(pass));
-
-      // Write target config (IP + port + nodeId)
-      const configChar = await service.getCharacteristic('0000ff03-0000-1000-8000-00805f9b34fb');
-      const config = JSON.stringify({ ip: localIP, port: 5005, node_id: nodeId });
-      await configChar.writeValue(new TextEncoder().encode(config));
-
-      device.gatt.disconnect();
-
-      sensors[sensors.length - 1].provisioned = true;
-      sensors[sensors.length - 1].busy = false;
-      renderSensors();
-      show(`Sensor ${nodeId} configured!` + (nodeId < 2 ? ' Now let\'s find Sensor 2.' : ''), 'ok');
-    }
-
-    // All done
-    setStep(3);
-    btn.textContent = 'Start Monitoring';
-    btn.disabled = false;
-    show('Both sensors configured! Place them on the crib. They\'ll connect to WiFi automatically.', 'ok');
-
-  } catch(e) {
-    show('Bluetooth error: ' + e.message + '. Make sure sensors are powered on.', 'error');
-    btn.disabled = false;
-    btn.textContent = 'Retry Scan';
-  }
-}
-
-// ─── USB Provisioning (fallback) ────────────────────────────
+// ─── USB Provisioning ───────────────────────────────────────
 async function provisionUSB(ssid, pass) {
   const btn = document.getElementById('btn');
 
@@ -254,6 +181,7 @@ async function provisionUSB(ssid, pass) {
     return;
   }
 
+  sensors = [];
   for (let i = 0; i < Math.min(ports.length, 2); i++) {
     const nodeId = i + 1;
     btn.textContent = `Setting up Sensor ${nodeId}...`;
@@ -273,10 +201,58 @@ async function provisionUSB(ssid, pass) {
     }
   }
 
+  // Don't declare victory yet — a sensor with a wrong password or a 5 GHz-only
+  // network fails silently (it just retries WiFi forever). Wait until the
+  // sensors actually show up on the server before moving on.
+  await verifySensorsOnline(sensors.length);
+}
+
+// ─── Post-provision verification ────────────────────────────
+const VERIFY_TIMEOUT_SEC = 75; // WiFi join + first packets typically < 30 s
+
+async function verifySensorsOnline(expected) {
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+
+  const started = Date.now();
+  while ((Date.now() - started) / 1000 < VERIFY_TIMEOUT_SEC) {
+    const secs = Math.round((Date.now() - started) / 1000);
+    show(`Sensors are rebooting and joining your WiFi... (${secs}s — this usually takes under 30 seconds)`, 'info');
+    try {
+      const r = await fetch('http://localhost:8080/api/v1/nodes');
+      const d = await r.json();
+      const online = (d.nodes || []).filter(n => n.status === 'active').length;
+      if (online >= Math.min(expected, 2) && online >= 1) {
+        setStep(3);
+        btn.textContent = 'Start Monitoring';
+        btn.disabled = false;
+        show(`${online} sensor${online > 1 ? 's' : ''} online and sending data! Unplug from USB, place on the crib rails, and plug into wall chargers.`, 'ok');
+        return;
+      }
+    } catch (e) { /* server not up yet — keep waiting */ }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  // Timed out — the #1 causes seen in the field, in order:
+  show(`Sensors were configured but haven't reached this computer after ${VERIFY_TIMEOUT_SEC} seconds. ` +
+    `Most common causes: (1) wrong WiFi password, (2) "${document.getElementById('ssid').value.trim()}" is a 5 GHz-only network — sensors need 2.4 GHz, ` +
+    `(3) this computer and the sensors are on different networks. Fix the WiFi details and run setup again.`, 'error');
+  btn.textContent = 'Run Setup Again';
+  btn.disabled = false;
+  document.getElementById('btnSkip').style.display = 'inline-block';
+  currentStep = 2;
+  setStep(2);
+}
+
+function skipCheck() {
+  // Sensors may just be slow, or the user may want to sort it out later.
+  document.getElementById('btnSkip').style.display = 'none';
   setStep(3);
+  const btn = document.getElementById('btn');
   btn.textContent = 'Start Monitoring';
   btn.disabled = false;
-  show('Sensors configured! Unplug from USB, place on crib, plug into wall chargers.', 'ok');
+  show('Skipped the connection check. If no data appears on the monitor, run setup again.', 'info');
 }
 
 // Init
