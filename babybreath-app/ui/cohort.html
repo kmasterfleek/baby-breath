@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baby Breath — Your house can feel you walk</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:#0a0d14; --surface:#111621; --surface2:#171d2b; --border:#232b3b; --text:#e6e9f0; --dim:#8a97ad;
+    --green:#4ade80; --blue:#60a5fa; --amber:#fbbf24; --red:#f87171; --cyan:#22d3ee;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  html { color-scheme: dark; background:var(--bg); }
+  body { background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size:17px; line-height:1.4; min-height:100vh; display:flex; flex-direction:column; }
+  button { font: inherit; }
+
+  /* Header */
+  .header { padding:14px 28px; display:flex; justify-content:space-between; align-items:center; gap:16px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .brand { font-size:26px; font-weight:700; letter-spacing:0.01em; }
+  .brand em { font-style:normal; color:var(--cyan); }
+  .tagline { font-size:15px; color:var(--dim); margin-top:2px; }
+  .pill { font-family:var(--mono); font-size:15px; font-weight:600; padding:8px 16px; border-radius:999px; border:1px solid var(--border); white-space:nowrap; transition: background 0.4s, color 0.4s, border-color 0.4s; }
+  .pill.connecting { color:var(--amber); border-color:rgba(251,191,36,0.5); }
+  .pill.waiting { color:var(--amber); border-color:rgba(251,191,36,0.5); background:rgba(251,191,36,0.08); }
+  .pill.live { color:var(--green); border-color:rgba(74,222,128,0.5); background:rgba(74,222,128,0.1); box-shadow:0 0 14px rgba(74,222,128,0.25); }
+  .pill.down { color:var(--red); border-color:rgba(248,113,113,0.5); background:rgba(248,113,113,0.08); }
+
+  /* Layout */
+  .grid { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:14px 28px 20px; max-width:1500px; width:100%; margin:0 auto; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 22px; min-width:0; }
+  .span2 { grid-column:1 / -1; }
+  .card-title { font-size:13px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:10px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .card-title .sub { text-transform:none; letter-spacing:0; font-weight:400; }
+  .btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); font-size:15px; padding:9px 18px; border-radius:8px; cursor:pointer; transition: border-color 0.2s, color 0.2s; }
+  .btn:hover { border-color:var(--cyan); color:var(--cyan); }
+  .btn:disabled { opacity:0.5; cursor:default; }
+  .hint { font-size:14px; color:var(--dim); }
+  .mono { font-family:var(--mono); }
+
+  /* Motion meter */
+  .motion-state { font-size:52px; font-weight:700; line-height:1.1; transition: color 0.4s; }
+  .motion-state.none { color:var(--dim); font-size:34px; }
+  .motion-state.quiet { color:var(--green); }
+  .motion-state.someone { color:var(--blue); }
+  .motion-state.moving { color:var(--amber); }
+  .motion-ratio { font-family:var(--mono); font-size:22px; color:var(--dim); margin-top:6px; }
+  .motion-bar { position:relative; height:22px; border-radius:11px; background:var(--surface2); margin-top:16px; overflow:hidden; border:1px solid var(--border); }
+  .motion-fill { height:100%; width:0; border-radius:11px; background:var(--green); transition: width 0.3s, background 0.4s; }
+  .tick { position:absolute; top:0; bottom:0; width:2px; background:var(--text); opacity:0.55; }
+  .tick-labels { position:relative; height:18px; font-family:var(--mono); font-size:12px; color:var(--dim); }
+  .tick-labels span { position:absolute; transform:translateX(-50%); }
+  .motion-scale { display:flex; justify-content:space-between; font-family:var(--mono); font-size:13px; color:var(--dim); margin-top:2px; }
+  .motion-actions { display:flex; align-items:center; gap:14px; margin-top:14px; flex-wrap:wrap; }
+  .teach-panel { margin-top:12px; padding:12px 16px; border:1px solid var(--amber); border-radius:8px; font-size:18px; color:var(--amber); }
+  .teach-panel strong { font-family:var(--mono); font-size:26px; }
+  .teach-note { margin-top:8px; font-size:14px; color:var(--dim); min-height:1.2em; }
+
+  /* Heatmaps */
+  .heat-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .heat-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+  .heat-frame { display:grid; grid-template-columns:22px 1fr; gap:6px; align-items:stretch; }
+  .axis-y { writing-mode:vertical-rl; transform:rotate(180deg); font-size:12px; color:var(--dim); text-align:center; font-family:var(--mono); }
+  .heat-box { position:relative; height:200px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .heat-box canvas { display:block; width:100%; height:100%; }
+  .heat-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:16px; background:rgba(17,22,33,0.85); }
+  .axis-x { font-size:12px; color:var(--dim); font-family:var(--mono); text-align:right; margin-top:4px; padding-left:28px; }
+  .legend { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--dim); margin-top:10px; }
+  .legend .bar { flex:0 0 160px; height:10px; border-radius:5px; background:linear-gradient(90deg,#00008c,#0000ff,#00ffff,#00ff00,#ffff00,#ff0000,#8c0000); }
+
+  /* Signal strength */
+  .sig-row { display:grid; grid-template-columns:90px 1fr 110px 80px; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+  .sig-row:last-of-type { border-bottom:none; }
+  .sig-name { font-size:18px; font-weight:600; }
+  .rssi-bar { height:16px; border-radius:8px; background:var(--surface2); border:1px solid var(--border); overflow:hidden; }
+  .rssi-fill { height:100%; width:0; background:var(--green); transition: width 0.4s, background 0.4s; }
+  .rssi-val { font-family:var(--mono); font-size:24px; text-align:right; }
+  .badge { font-family:var(--mono); font-size:13px; text-align:center; padding:4px 8px; border-radius:6px; border:1px solid var(--border); color:var(--dim); }
+  .badge.ok { color:var(--green); border-color:rgba(74,222,128,0.5); }
+  .badge.warn { color:var(--amber); border-color:rgba(251,191,36,0.5); }
+  .badge.off { color:var(--red); border-color:rgba(248,113,113,0.5); }
+  .sig-scale { display:flex; justify-content:space-between; font-family:var(--mono); font-size:12px; color:var(--dim); padding:0 0 0 102px; margin-right:202px; }
+
+  /* Room map */
+  .room { width:100%; height:auto; max-height:300px; display:block; }
+  .room .lbl { fill:var(--dim); font-size:13px; font-family:var(--mono); }
+  .room .ray { stroke:var(--dim); stroke-width:1.5; stroke-dasharray:5 6; opacity:0.5; }
+  .caption { font-size:14px; color:var(--dim); margin-top:8px; }
+
+  /* Camera */
+  .cam-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .cam-wrap { margin-top:12px; max-width:480px; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#000; }
+  .cam-wrap canvas { display:block; width:100%; height:auto; }
+  .cam-caption { font-size:22px; font-weight:600; margin-top:10px; color:var(--cyan); }
+
+  /* Under test drawer */
+  details.drawer summary { cursor:pointer; font-size:15px; color:var(--dim); text-transform:uppercase; letter-spacing:0.12em; list-style:none; }
+  details.drawer summary::before { content:"▸ "; }
+  details.drawer[open] summary::before { content:"▾ "; }
+  .vitals { display:flex; gap:40px; margin-top:12px; flex-wrap:wrap; }
+  .vital { font-family:var(--mono); }
+  .vital .v { font-size:36px; font-weight:600; }
+  .vital .u { font-size:14px; color:var(--dim); }
+  .warn-text { font-size:14px; color:var(--amber); margin-top:8px; }
+
+  /* Footer */
+  .footer { padding:14px 28px; border-top:1px solid var(--border); background:var(--surface); font-size:14px; color:var(--dim); text-align:center; line-height:1.5; }
+  .footer strong { color:var(--text); }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns:1fr; padding:12px; }
+    .heat-grid { grid-template-columns:1fr; }
+    .header { padding:12px 16px; }
+    .motion-state { font-size:40px; }
+    .sig-row { grid-template-columns:70px 1fr 90px 70px; }
+    .sig-scale { padding-left:82px; margin-right:172px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <div class="brand">Baby <em>Breath</em></div>
+    <div class="tagline">Your house can feel you walk</div>
+  </div>
+  <div class="pill connecting" id="statusPill">connecting…</div>
+</header>
+
+<main class="grid">
+
+  <!-- 1. Motion meter -->
+  <section class="card span2">
+    <div class="card-title"><span>Motion in the room</span><span class="sub" id="taughtAgo"></span></div>
+    <div class="motion-state none" id="motionState">Waiting for your boards</div>
+    <div class="motion-ratio" id="motionRatio">—</div>
+    <div class="motion-bar">
+      <div class="motion-fill" id="motionFill"></div>
+      <div class="tick" style="left:32.5%"></div>
+      <div class="tick" style="left:50%"></div>
+    </div>
+    <div class="tick-labels"><span style="left:32.5%">1.3×</span><span style="left:50%">2.0×</span></div>
+    <div class="motion-scale"><span>0×</span><span>1×</span><span>2×</span><span>3×</span><span>4×</span></div>
+    <div class="motion-actions">
+      <button class="btn" id="teachBtn">Teach the room</button>
+      <span class="hint">Quiet &lt; 1.3× &nbsp;·&nbsp; Someone here 1.3–2× &nbsp;·&nbsp; Moving &gt; 2× &nbsp;(× the empty-room level)</span>
+    </div>
+    <div class="teach-panel" id="teachPanel" hidden>Leave the room empty for 60 seconds — <strong id="teachCount">60</strong> s remaining</div>
+    <div class="teach-note" id="teachNote"></div>
+  </section>
+
+  <!-- 2. CSI heatmaps -->
+  <section class="card span2">
+    <div class="card-title"><span>What the boards feel</span><span class="sub">each subcarrier's amplitude vs. its own 10 s running mean · last 30 s</span></div>
+    <div class="heat-grid">
+      <div>
+        <div class="heat-title">Board 1</div>
+        <div class="heat-frame">
+          <div class="axis-y">subcarriers ↑</div>
+          <div class="heat-box"><canvas id="heat1"></canvas><div class="heat-empty" id="heatEmpty1">no data yet</div></div>
+        </div>
+        <div class="axis-x">time →</div>
+      </div>
+      <div>
+        <div class="heat-title">Board 2</div>
+        <div class="heat-frame">
+          <div class="axis-y">subcarriers ↑</div>
+          <div class="heat-box"><canvas id="heat2"></canvas><div class="heat-empty" id="heatEmpty2">no data yet</div></div>
+        </div>
+        <div class="axis-x">time →</div>
+      </div>
+    </div>
+    <div class="legend"><span>weaker than usual</span><div class="bar"></div><span>stronger than usual</span></div>
+  </section>
+
+  <!-- 3. Signal strength -->
+  <section class="card">
+    <div class="card-title"><span>Signal strength</span><span class="sub">from the server, every 2 s</span></div>
+    <div class="sig-row">
+      <div class="sig-name">Board 1</div>
+      <div class="rssi-bar"><div class="rssi-fill" id="rssiFill1"></div></div>
+      <div class="rssi-val" id="rssiVal1">—</div>
+      <div class="badge off" id="nodeStatus1">no board</div>
+    </div>
+    <div class="sig-row">
+      <div class="sig-name">Board 2</div>
+      <div class="rssi-bar"><div class="rssi-fill" id="rssiFill2"></div></div>
+      <div class="rssi-val" id="rssiVal2">—</div>
+      <div class="badge off" id="nodeStatus2">no board</div>
+    </div>
+    <div class="sig-scale"><span>-90 dBm</span><span>-55</span><span>-20 dBm</span></div>
+    <div class="caption">Weak or stale? Move the board away from the router; re-run the boot log.</div>
+  </section>
+
+  <!-- 4. Room map (schematic) -->
+  <section class="card">
+    <div class="card-title"><span>Room map</span><span class="sub">schematic</span></div>
+    <svg class="room" viewBox="0 0 400 270" role="img" aria-label="Schematic of router, two boards and a person">
+      <defs>
+        <radialGradient id="glow1"><stop offset="0" stop-color="#22d3ee" stop-opacity="0.95"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+        <radialGradient id="glow2"><stop offset="0" stop-color="#22d3ee" stop-opacity="0.95"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="6" y="6" width="388" height="258" rx="14" fill="none" stroke="#232b3b" stroke-width="2"/>
+      <ellipse id="roomTint" cx="200" cy="165" rx="150" ry="85" fill="#4ade80" fill-opacity="0.04"/>
+      <line x1="200" y1="56" x2="60" y2="180" class="ray"/>
+      <line x1="200" y1="56" x2="340" y2="180" class="ray"/>
+      <g transform="translate(200,42)">
+        <line x1="-22" y1="-12" x2="-30" y2="-34" stroke="#8a97ad" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="22" y1="-12" x2="30" y2="-34" stroke="#8a97ad" stroke-width="2.5" stroke-linecap="round"/>
+        <rect x="-38" y="-12" width="76" height="24" rx="6" fill="#1f2937" stroke="#8a97ad" stroke-width="1.5"/>
+        <circle cx="-20" cy="0" r="2.5" fill="#4ade80"/><circle cx="-10" cy="0" r="2.5" fill="#4ade80"/>
+        <text y="34" text-anchor="middle" class="lbl">Router</text>
+      </g>
+      <g transform="translate(60,180)">
+        <circle id="glowC1" r="30" fill="url(#glow1)" opacity="0.1"/>
+        <rect x="-18" y="-12" width="36" height="24" rx="4" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+        <text y="38" text-anchor="middle" class="lbl">Board 1</text>
+      </g>
+      <g transform="translate(340,180)">
+        <circle id="glowC2" r="30" fill="url(#glow2)" opacity="0.1"/>
+        <rect x="-18" y="-12" width="36" height="24" rx="4" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+        <text y="38" text-anchor="middle" class="lbl">Board 2</text>
+      </g>
+      <g id="person" transform="translate(200,160)" fill="none" stroke="#e6e9f0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.35">
+        <circle cy="-42" r="11"/>
+        <path d="M0,-30 L0,14 M0,14 L-15,50 M0,14 L15,50 M-22,-4 L0,-24 L22,-4"/>
+      </g>
+      <text x="200" y="250" text-anchor="middle" class="lbl" id="roomLabel">waiting for data</text>
+    </svg>
+    <div class="caption">Schematic, not a map. Boards at least 8 ft from the router; your body between the router and a board.</div>
+  </section>
+
+  <!-- 6. Camera (off by default) -->
+  <section class="card span2">
+    <div class="card-title"><span>Camera</span><span class="sub">off by default · nothing leaves this laptop</span></div>
+    <div class="cam-row">
+      <button class="btn" id="camBtn">Show camera</button>
+      <span class="hint" id="camMsg">Camera is off. Turn it on to compare what a camera sees with what the WiFi feels.</span>
+    </div>
+    <div class="cam-wrap" id="camWrap" hidden><canvas id="camCanvas" width="320" height="240"></canvas></div>
+    <div class="cam-caption" id="camCaption" hidden>Now cover the camera. The WiFi still feels you.</div>
+  </section>
+
+  <!-- 7. Under test drawer -->
+  <details class="card span2 drawer">
+    <summary>Under test: breathing and heart rate (experimental, not validated)</summary>
+    <div class="vitals">
+      <div class="vital"><span class="v" id="brVal">—</span> <span class="u">breaths / min</span></div>
+      <div class="vital"><span class="v" id="hrVal">—</span> <span class="u">beats / min</span></div>
+    </div>
+    <div class="warn-text">Experimental, not validated. These numbers come from an algorithm still under test and may be wrong or meaningless. This is not a medical device and must never be used to monitor a baby or anyone's health.</div>
+  </details>
+
+</main>
+
+<footer class="footer">
+  <strong>Not a medical device.</strong> A learning tool that shows motion in a room from WiFi reflections. Never use it to monitor a baby or anyone's health.
+</footer>
+
+<script>
+'use strict';
+// ─── Constants shared with baby.html (same storage key and thresholds) ───
+const BASELINE_KEY = 'babybreath.roomBaseline';
+const TEACH_SEC = 60;
+const QUIET_MAX = 1.3, SOMEONE_MAX = 2.0;
+const NODE_IDS = [1, 2];
+const FRESH_MS = 5000;           // no message for this long = "waiting for your boards"
+const HEAT_COLS = 600;           // 30 s at 20 columns/s
+const HEAT_PUSH_MS = 50;         // one column per 50 ms per board
+const HEAT_MEAN_TAU_MS = 10000;  // per-bin running mean time constant
+const HEAT_RANGE = 0.4;          // ±40 % of the running mean spans the colour scale
+const VAR_WIN = 40;              // 2 s of mean-amplitude samples at 20/s
+const CAM_W = 160, CAM_H = 120, BLK = 8, BX = CAM_W / BLK, BY = CAM_H / BLK;
+
+const $ = (id) => document.getElementById(id);
+
+// ─── Colormap: blue → cyan → green → yellow → red. Index 255 = "no data" background ───
+const LUT = new Uint8Array(256 * 3);
+(function buildLut() {
+  const stops = [[0,0,0.55],[0,0,1],[0,1,1],[0,1,0],[1,1,0],[1,0,0],[0.55,0,0]];
+  for (let i = 0; i < 255; i++) {
+    const t = i / 254 * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(t)), f = t - k;
+    for (let c = 0; c < 3; c++) LUT[i*3+c] = Math.round(255 * (stops[k][c] + (stops[k+1][c] - stops[k][c]) * f));
+  }
+  LUT[765] = 0x17; LUT[766] = 0x1d; LUT[767] = 0x2b;
+})();
+function lutCss(t, a) {
+  const i = Math.round(Math.max(0, Math.min(1, t)) * 254) * 3;
+  return 'rgba(' + LUT[i] + ',' + LUT[i+1] + ',' + LUT[i+2] + ',' + a + ')';
+}
+
+const state = {
+  wsConnected: false, everConnected: false, retryMs: 1000, lastMsgAt: 0, pollOk: null,
+  nodes: new Map(),                 // node_id -> { status, rssi, wsRssi, seenAt }
+  vitals: { br: null, hr: null },
+};
+function fresh() { return meter.ema != null && (Date.now() - state.lastMsgAt) < FRESH_MS; }
+
+// ─── Motion meter: motion_band_power vs. this room's empty baseline ───
+const meter = { baseline: null, p90: null, taughtAt: null, ema: null, emaTs: 0, teaching: false, samples: [], teachEnd: 0, timer: null };
+
+function loadBaseline() {
+  try {
+    const b = JSON.parse(localStorage.getItem(BASELINE_KEY) || 'null');
+    if (b && b.baseline > 0) { meter.baseline = b.baseline; meter.p90 = b.baseline_p90 || null; meter.taughtAt = b.timestamp || null; }
+  } catch (e) {}
+}
+loadBaseline();
+window.addEventListener('storage', (e) => { if (e.key === BASELINE_KEY) loadBaseline(); });
+
+// ~1 s time-constant EMA, alpha derived from the real gap between updates
+function feedMotion(power, now) {
+  if (!(power > 0)) return;
+  if (meter.ema == null) meter.ema = power;
+  else { const dt = Math.min(now - meter.emaTs, 5000); meter.ema += (1 - Math.exp(-dt / 1000)) * (power - meter.ema); }
+  meter.emaTs = now;
+}
+function motionRatio() { return (meter.baseline && meter.ema != null) ? meter.ema / meter.baseline : null; }
+function motionLevel() {
+  const r = motionRatio();
+  if (r == null) return 'none';
+  return r < QUIET_MAX ? 'quiet' : r <= SOMEONE_MAX ? 'someone' : 'moving';
+}
+function postCalibration(action) {
+  try { fetch('/api/v1/calibration/' + action, { method: 'POST' }).catch(() => {}); } catch (e) {}
+}
+function startTeach() {
+  if (meter.teaching) { finishTeach(true); return; }
+  meter.teaching = true; meter.samples = []; meter.teachEnd = Date.now() + TEACH_SEC * 1000;
+  postCalibration('start');
+  $('teachNote').textContent = '';
+  meter.timer = setInterval(() => {
+    const left = Math.max(0, Math.ceil((meter.teachEnd - Date.now()) / 1000));
+    $('teachCount').textContent = left;
+    if (left <= 0) finishTeach(false);
+  }, 250);
+  renderMotion();
+}
+function finishTeach(cancelled) {
+  clearInterval(meter.timer); meter.timer = null; meter.teaching = false;
+  postCalibration('stop');
+  const s = meter.samples.slice().sort((a, b) => a - b);
+  meter.samples = [];
+  const note = $('teachNote');
+  if (cancelled) note.textContent = 'Teaching cancelled.';
+  else if (s.length < 10) note.textContent = 'Teaching failed: not enough sensor data (' + s.length + ' samples). Are the boards live?';
+  else {
+    const n = s.length;
+    meter.baseline = n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+    meter.p90 = s[Math.min(n - 1, Math.floor(0.9 * n))];
+    meter.taughtAt = Date.now();
+    try { localStorage.setItem(BASELINE_KEY, JSON.stringify({ baseline: meter.baseline, baseline_p90: meter.p90, timestamp: meter.taughtAt, samples: n })); } catch (e) {}
+    note.textContent = 'Room taught. Empty-room level ' + meter.baseline.toFixed(1) + ' (p90 ' + meter.p90.toFixed(1) + ', ' + n + ' samples). Now walk in.';
+  }
+  renderMotion();
+}
+function relTime(ts) {
+  if (!ts) return '';
+  const sec = Math.max(0, (Date.now() - ts) / 1000);
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.floor(sec / 60) + ' min ago';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' h ago';
+  return Math.floor(sec / 86400) + ' d ago';
+}
+
+const LEVEL_LABEL = { quiet: 'Quiet room', someone: 'Someone here', moving: 'Moving' };
+const LEVEL_COLOR = { none: 'var(--dim)', quiet: 'var(--green)', someone: 'var(--blue)', moving: 'var(--amber)' };
+
+function renderMotion() {
+  const live = fresh();
+  const level = live ? motionLevel() : 'none';
+  const r = live ? motionRatio() : null;
+  const stateEl = $('motionState'), ratioEl = $('motionRatio'), fill = $('motionFill');
+  let label;
+  if (!live) label = state.wsConnected ? 'Waiting for your boards' : 'Waiting for the server';
+  else if (level === 'none') label = 'Teach the room first';
+  else label = LEVEL_LABEL[level];
+  stateEl.textContent = label; stateEl.className = 'motion-state ' + level;
+  if (r != null) {
+    fill.style.width = (Math.min(r, 4) / 4 * 100) + '%'; fill.style.background = LEVEL_COLOR[level];
+    ratioEl.textContent = r.toFixed(2) + '× the empty room  (motion ' + meter.ema.toFixed(0) + ' vs. ' + meter.baseline.toFixed(0) + ')';
+  } else {
+    fill.style.width = '0%';
+    ratioEl.textContent = live ? 'raw motion ' + meter.ema.toFixed(0) + ' — teach the room to get a ratio' : '—';
+  }
+  $('teachPanel').hidden = !meter.teaching;
+  $('teachBtn').textContent = meter.teaching ? 'Cancel' : meter.baseline ? 'Re-teach the room' : 'Teach the room';
+  $('taughtAgo').textContent = meter.baseline ? 'taught ' + relTime(meter.taughtAt) : 'not taught yet';
+}
+$('teachBtn').addEventListener('click', startTeach);
+
+// ─── CSI heatmaps: one scrolling canvas per board, ring buffer of colour indices ───
+function makeHeat(id) {
+  return { id, canvas: $('heat' + id), ctx: null, img: null, bins: null, rows: 0, mean: null,
+    ring: null, head: 0, lastPush: 0, dirty: false, lastSeen: 0,
+    meanAmp: new Float32Array(VAR_WIN), meanHead: 0, meanCount: 0, cvSlow: null, cvSlowTs: 0 };
+}
+const heats = { 1: makeHeat(1), 2: makeHeat(2) };
+
+function initHeat(h, amp) {
+  const bins = [];
+  for (let i = 0; i < amp.length; i++) if (amp[i] !== 0) bins.push(i);   // skip unused (zero) bins
+  if (bins.length < 8) return false;
+  h.bins = Int16Array.from(bins); h.rows = bins.length;
+  h.mean = new Float32Array(h.rows);
+  for (let r = 0; r < h.rows; r++) h.mean[r] = amp[bins[r]];
+  h.ring = new Uint8Array(HEAT_COLS * h.rows).fill(255);
+  h.canvas.width = HEAT_COLS; h.canvas.height = h.rows;
+  h.ctx = h.canvas.getContext('2d');
+  h.img = h.ctx.createImageData(HEAT_COLS, h.rows);
+  for (let p = 3; p < h.img.data.length; p += 4) h.img.data[p] = 255;
+  return true;
+}
+
+function pushHeat(h, amp, now) {
+  if (!h.ring && !initHeat(h, amp)) return;
+  if (now - h.lastPush < HEAT_PUSH_MS) return;
+  const dt = h.lastPush ? Math.min(now - h.lastPush, 2000) : HEAT_PUSH_MS;
+  h.lastPush = now;
+  const alpha = 1 - Math.exp(-dt / HEAT_MEAN_TAU_MS);
+  const base = h.head * h.rows, rows = h.rows, bins = h.bins, mean = h.mean, ring = h.ring;
+  let sum = 0;
+  for (let r = 0; r < rows; r++) {
+    const a = +amp[bins[r]] || 0, m = mean[r];
+    const d = (a - m) / (m + 1e-3);
+    const t = Math.max(0, Math.min(1, d / (2 * HEAT_RANGE) + 0.5));
+    ring[base + r] = Math.round(t * 254);
+    mean[r] = m + alpha * (a - m);
+    sum += a;
+  }
+  h.head = (h.head + 1) % HEAT_COLS;
+  h.dirty = true;
+  h.meanAmp[h.meanHead] = sum / rows; h.meanHead = (h.meanHead + 1) % VAR_WIN;
+  if (h.meanCount < VAR_WIN) h.meanCount++;
+}
+
+function drawHeat(h) {
+  if (!h.dirty || !h.img) return;
+  h.dirty = false;
+  const data = h.img.data, rows = h.rows, ring = h.ring;
+  for (let c = 0; c < HEAT_COLS; c++) {
+    const src = ((h.head + c) % HEAT_COLS) * rows;
+    for (let r = 0; r < rows; r++) {
+      const k = ring[src + r] * 3, p = ((rows - 1 - r) * HEAT_COLS + c) * 4;
+      data[p] = LUT[k]; data[p+1] = LUT[k+1]; data[p+2] = LUT[k+2];
+    }
+  }
+  h.ctx.putImageData(h.img, 0, 0);
+}
+
+// Coefficient of variation of the board's mean amplitude over the last 2 s
+function heatCv(h) {
+  const n = h.meanCount;
+  if (n < 10) return null;
+  let s = 0, s2 = 0;
+  for (let i = 0; i < n; i++) { const v = h.meanAmp[i]; s += v; s2 += v * v; }
+  const m = s / n, va = Math.max(0, s2 / n - m * m);
+  return m > 0 ? Math.sqrt(va) / m : null;
+}
+// 0..1 glow: how much the board's variability exceeds its own slow (~30 s) baseline
+function boardGlow(h, now) {
+  const cv = heatCv(h);
+  if (cv == null) return 0;
+  if (h.cvSlow == null) { h.cvSlow = cv; h.cvSlowTs = now; }
+  else if (now - h.cvSlowTs >= 500) {
+    const a = 1 - Math.exp(-(now - h.cvSlowTs) / 30000);
+    h.cvSlow += a * (cv - h.cvSlow); h.cvSlowTs = now;
+  }
+  return Math.max(0, Math.min(1, (cv / (h.cvSlow + 1e-6) - 1) / 2));
+}
+
+function renderHeatOverlays() {
+  const now = Date.now();
+  NODE_IDS.forEach(id => {
+    const h = heats[id], el = $('heatEmpty' + id);
+    if (!h.ring) { el.hidden = false; el.textContent = state.wsConnected ? 'no data yet' : 'waiting for your boards'; }
+    else if (now - h.lastSeen > FRESH_MS) { el.hidden = false; el.textContent = 'no fresh data — waiting for board ' + id; }
+    else el.hidden = true;
+  });
+}
+
+// ─── Room map (schematic) ───
+function renderRoom() {
+  const now = Date.now(), live = fresh();
+  NODE_IDS.forEach(id => {
+    const g = live ? boardGlow(heats[id], now) : 0;
+    const c = $('glowC' + id);
+    c.setAttribute('opacity', (0.08 + 0.92 * g).toFixed(2));
+    c.setAttribute('r', (30 + 34 * g).toFixed(1));
+  });
+  const level = live ? motionLevel() : 'none', r = live ? motionRatio() : null;
+  const tint = $('roomTint'), person = $('person'), label = $('roomLabel');
+  const COL = { none: '#8a97ad', quiet: '#4ade80', someone: '#60a5fa', moving: '#fbbf24' };
+  tint.setAttribute('fill', COL[level]);
+  tint.setAttribute('fill-opacity', r != null ? Math.min(0.4, 0.04 + 0.09 * r).toFixed(3) : '0.04');
+  person.setAttribute('opacity', level === 'someone' || level === 'moving' ? '1' : '0.3');
+  person.setAttribute('stroke', COL[level]);
+  label.textContent = !live ? 'waiting for data' : level === 'none' ? 'teach the room to light this up' : LEVEL_LABEL[level] + (r != null ? ' · ' + r.toFixed(1) + '×' : '');
+}
+
+// ─── Signal strength (from GET /api/v1/nodes every 2 s) ───
+function nodeIsLive(n) {
+  if (!n) return false;
+  if (n.status) return n.status === 'active';
+  return (Date.now() - (n.seenAt || 0)) < FRESH_MS;   // poll unavailable: fall back to the stream
+}
+function liveCount() { let c = 0; NODE_IDS.forEach(id => { if (nodeIsLive(state.nodes.get(id))) c++; }); return c; }
+
+async function pollNodes() {
+  try {
+    const r = await fetch('/api/v1/nodes', { cache: 'no-store' });
+    const d = await r.json();
+    const seen = new Set();
+    (d.nodes || []).forEach(n => {
+      const id = Number(n.node_id); seen.add(id);
+      const cur = state.nodes.get(id) || {};
+      cur.status = n.status || 'stale'; cur.rssi = typeof n.rssi_dbm === 'number' ? n.rssi_dbm : null;
+      state.nodes.set(id, cur);
+    });
+    state.nodes.forEach((cur, id) => { if (!seen.has(id)) cur.status = 'missing'; });
+    state.pollOk = true;
+  } catch (e) {
+    state.pollOk = false;
+    state.nodes.forEach(cur => { delete cur.status; });
+  }
+  renderSignal(); renderStatus();
+}
+
+function renderSignal() {
+  NODE_IDS.forEach(id => {
+    const n = state.nodes.get(id);
+    const rssi = n ? (typeof n.rssi === 'number' ? n.rssi : (typeof n.wsRssi === 'number' ? n.wsRssi : null)) : null;
+    const st = !n || n.status === 'missing' ? 'no board' : n.status ? n.status : nodeIsLive(n) ? 'active' : 'stale';
+    $('rssiVal' + id).textContent = rssi != null ? Math.round(rssi) + ' dBm' : '—';
+    const pct = rssi != null && st !== 'no board' ? Math.max(0, Math.min(1, (rssi + 90) / 70)) : 0;
+    const fill = $('rssiFill' + id);
+    fill.style.width = (pct * 100) + '%';
+    fill.style.background = pct > 0.5 ? 'var(--green)' : pct > 0.3 ? 'var(--amber)' : 'var(--red)';
+    const badge = $('nodeStatus' + id);
+    badge.textContent = st;
+    badge.className = 'badge ' + (st === 'active' ? 'ok' : st === 'stale' ? 'warn' : 'off');
+  });
+}
+
+// ─── Header status pill ───
+function renderStatus() {
+  const pill = $('statusPill');
+  if (!state.wsConnected) {
+    const down = state.everConnected || state.retryMs > 1000;
+    pill.className = 'pill ' + (down ? 'down' : 'connecting');
+    pill.textContent = down ? 'server not reachable' : 'connecting…';
+    return;
+  }
+  const n = liveCount();
+  pill.className = 'pill ' + (n ? 'live' : 'waiting');
+  pill.textContent = n ? n + ' board' + (n === 1 ? '' : 's') + ' live' : 'waiting for your boards';
+}
+
+// ─── Under test drawer ───
+function renderVitals() {
+  const live = fresh();
+  $('brVal').textContent = live && state.vitals.br != null ? state.vitals.br.toFixed(1) : '—';
+  $('hrVal').textContent = live && state.vitals.hr != null ? state.vitals.hr.toFixed(0) : '—';
+}
+
+// ─── WebSocket with exponential backoff ───
+let ws = null, reconnectTimer = null;
+function connect() {
+  const host = location.hostname || 'localhost';
+  try { ws = new WebSocket('ws://' + host + ':8765/ws/sensing'); }
+  catch (e) { scheduleReconnect(); return; }
+  ws.onopen = () => { state.wsConnected = true; state.everConnected = true; state.retryMs = 1000; renderStatus(); };
+  ws.onclose = () => { state.wsConnected = false; renderStatus(); scheduleReconnect(); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch (err) {} };
+}
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, state.retryMs);
+  state.retryMs = Math.min(state.retryMs * 2, 15000);
+  renderStatus();
+}
+
+function onMsg(msg) {
+  if (msg.type !== 'sensing_update') return;
+  const now = Date.now();
+  state.lastMsgAt = now;
+  const f = msg.features || {};
+  const p = f.motion_band_power;
+  if (typeof p === 'number' && p > 0) {
+    if (meter.teaching) meter.samples.push(p);   // every sample, not throttled, for a better median
+    feedMotion(p, now);
+  }
+  const nodes = Array.isArray(msg.nodes) ? msg.nodes : [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i], id = Number(n.node_id), h = heats[id];
+    if (!h) continue;
+    h.lastSeen = now;
+    const cur = state.nodes.get(id) || {};
+    cur.seenAt = now;
+    if (typeof n.rssi_dbm === 'number') cur.wsRssi = n.rssi_dbm;
+    state.nodes.set(id, cur);
+    if (Array.isArray(n.amplitude) && n.amplitude.length) pushHeat(h, n.amplitude, now);
+  }
+  // classification.presence / persons are intentionally ignored (not informative)
+  const v = msg.vital_signs || {};
+  state.vitals.br = typeof v.breathing_rate_bpm === 'number' ? v.breathing_rate_bpm : null;
+  state.vitals.hr = typeof v.heart_rate_bpm === 'number' ? v.heart_rate_bpm : null;
+}
+
+// ─── Camera: downscaled video + frame-difference motion heatmap (no pose, no skeleton) ───
+const cam = { on: false, stream: null, video: null, work: null, wctx: null, out: null, octx: null,
+  prev: new Uint8Array(CAM_W * CAM_H), cur: new Uint8Array(CAM_W * CAM_H), blocks: new Float32Array(BX * BY),
+  ready: false, lastFrame: 0 };
+const CAM_LUT = [];
+for (let i = 0; i < 32; i++) CAM_LUT.push(lutCss(0.5 + 0.5 * i / 31, 0.2 + 0.6 * i / 31));
+
+async function toggleCamera() {
+  if (cam.on) { stopCamera(); return; }
+  const msg = $('camMsg'), btn = $('camBtn');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    msg.textContent = 'This browser will not give the page a camera here (it needs localhost or https). The WiFi still feels you.';
+    return;
+  }
+  btn.disabled = true; msg.textContent = 'Asking for camera permission…';
+  try {
+    cam.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false });
+  } catch (e) {
+    btn.disabled = false;
+    const name = e && e.name;
+    msg.textContent = name === 'NotAllowedError' || name === 'SecurityError'
+      ? 'Camera permission denied. That is fine: the WiFi still feels you.'
+      : 'Could not open a camera (' + (name || 'error') + '). The WiFi still feels you.';
+    return;
+  }
+  cam.video = document.createElement('video');
+  cam.video.muted = true; cam.video.playsInline = true; cam.video.srcObject = cam.stream;
+  try { await cam.video.play(); } catch (e) {}
+  if (!cam.work) {
+    cam.work = document.createElement('canvas'); cam.work.width = CAM_W; cam.work.height = CAM_H;
+    cam.wctx = cam.work.getContext('2d', { willReadFrequently: true });
+    cam.out = $('camCanvas'); cam.octx = cam.out.getContext('2d');
+  }
+  cam.prev.fill(0); cam.ready = false; cam.on = true;
+  btn.disabled = false; btn.textContent = 'Hide camera';
+  $('camWrap').hidden = false; $('camCaption').hidden = false;
+  msg.textContent = 'Wave at it, then cover the lens and watch the motion meter above.';
+}
+function stopCamera() {
+  cam.on = false;
+  if (cam.stream) { cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; }
+  if (cam.video) { cam.video.srcObject = null; cam.video = null; }
+  if (cam.octx) cam.octx.clearRect(0, 0, cam.out.width, cam.out.height);
+  $('camWrap').hidden = true; $('camCaption').hidden = true;
+  $('camBtn').textContent = 'Show camera';
+  $('camMsg').textContent = 'Camera is off. Turn it on to compare what a camera sees with what the WiFi feels.';
+}
+function drawCamera(now) {
+  if (!cam.on || !cam.video || cam.video.readyState < 2 || now - cam.lastFrame < 66) return;
+  cam.lastFrame = now;
+  const w = cam.wctx, o = cam.octx, out = cam.out;
+  w.drawImage(cam.video, 0, 0, CAM_W, CAM_H);
+  const px = w.getImageData(0, 0, CAM_W, CAM_H).data;
+  const cur = cam.cur, prev = cam.prev, blocks = cam.blocks, ready = cam.ready;
+  blocks.fill(0);
+  for (let y = 0, i = 0, j = 0; y < CAM_H; y++) {
+    const rowBlk = ((y / BLK) | 0) * BX;
+    for (let x = 0; x < CAM_W; x++, i++, j += 4) {
+      const g = (px[j] * 77 + px[j+1] * 151 + px[j+2] * 28) >> 8;
+      cur[i] = g;
+      if (ready) blocks[rowBlk + ((x / BLK) | 0)] += Math.abs(g - prev[i]);
+    }
+  }
+  cam.cur = prev; cam.prev = cur; cam.ready = true;
+  o.drawImage(cam.work, 0, 0, out.width, out.height);
+  if (!ready) return;
+  const sx = out.width / BX, sy = out.height / BY, norm = 1 / (BLK * BLK * 40);
+  for (let by = 0; by < BY; by++) {
+    for (let bx = 0; bx < BX; bx++) {
+      const t = Math.min(1, blocks[by * BX + bx] * norm);
+      if (t < 0.1) continue;
+      o.fillStyle = CAM_LUT[Math.round(t * 31)];
+      o.fillRect(bx * sx, by * sy, sx, sy);
+    }
+  }
+}
+$('camBtn').addEventListener('click', toggleCamera);
+window.addEventListener('pagehide', () => { if (cam.on) stopCamera(); });
+
+// ─── Loops ───
+function frame(now) {
+  drawHeat(heats[1]); drawHeat(heats[2]);
+  drawCamera(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setInterval(() => { renderMotion(); renderRoom(); }, 100);
+setInterval(() => { renderStatus(); renderVitals(); renderHeatOverlays(); renderSignal(); }, 1000);
+setInterval(pollNodes, 2000);
+
+connect();
+pollNodes();
+renderMotion(); renderRoom(); renderStatus(); renderHeatOverlays();
+</script>
+</body>
+</html>

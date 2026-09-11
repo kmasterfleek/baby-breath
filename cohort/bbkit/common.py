@@ -25,7 +25,7 @@ WS_PORT = 8765
 UDP_PORT = 5005
 HTTP_BASE = f"http://localhost:{HTTP_PORT}"
 WS_URL = f"ws://localhost:{WS_PORT}/ws/sensing"
-UI_URL = f"{HTTP_BASE}/ui/baby.html"
+UI_URL = f"{HTTP_BASE}/ui/cohort.html"
 
 PIP_DEPS = ["esptool", "esp-idf-nvs-partition-gen", "pyserial", "websockets"]
 

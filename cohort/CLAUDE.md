@@ -32,7 +32,7 @@ reason. On FAIL, follow the failure branch for that step (below), never skip ahe
 8. Placement (no command; see the diagram in RUNBOOK.md)
 9. `python3 babybreath.py walktest`
 10. `python3 babybreath.py calibrate` (room empty for 10 minutes)
-11. Optional: open http://localhost:8080/ui/baby.html and sit still
+11. Open http://localhost:8080/ui/cohort.html in the browser. Press "Teach the room" with the room empty, then have someone walk between the boards and watch the meter and the heatmaps move
 
 Steps 3, 4 and 5 are per board. Full details and the placement diagram are in
 `RUNBOOK.md`; read it before the session starts.

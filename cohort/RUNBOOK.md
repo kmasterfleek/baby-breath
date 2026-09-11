@@ -135,7 +135,7 @@ If it fails:
 ### 5. serve
 
 `serve` starts the sensing server from the repository root and waits until it
-answers. It prints the UI address: `http://localhost:8080/ui/baby.html`. Leave
+answers. It prints the page address: `http://localhost:8080/ui/cohort.html` (the motion meter, the two boards' WiFi heatmaps, signal strength, and the room schematic). Leave
 that terminal window open; open a second window for the next steps.
 
 If it fails: "exited early" usually means port 8080, 8765 or 5005 is already in
