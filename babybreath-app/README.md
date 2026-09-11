@@ -139,6 +139,21 @@ B=../firmware/esp32-csi-node/release_bins
   --node-id 1 --tdm-slot 0 --tdm-total 2      # node 2: --node-id 2 --tdm-slot 1
 ```
 
+> **No ESP-IDF needed to flash or provision.** A plain venv with `pip install esptool esp-idf-nvs-partition-gen pyserial` does both
+> (esptool 5.x commands are `erase-flash` / `write-flash` / `flash-id`). The `../cohort/` starter kit wraps every step with
+> PASS/FAIL checkpoints: `python3 ../cohort/babybreath.py detect | flash | provision | bootlog | serve | check | walktest | calibrate`.
+>
+> **Mesh WiFi (several access points): add `--filter-mac <bssid>`.** Without it the node captures frames from every transmitter
+> and the signal is ~4× noisier. Read the BSSID from the boot log line `connected with <ssid> ... bssid = xx:xx:xx:xx:xx:xx`
+> after the first join, then re-provision with that value. A node that later shows `stale` with zero frames has probably roamed
+> to another access point — re-read the BSSID and re-provision.
+>
+> **Placement matters more than anything:** boards ≥ 8 ft from the router, the person's body between the router and a board,
+> board 2–3 ft from the chest, fan off. A board 1 ft from the router is effectively blind.
+>
+> The server keeps nodes streaming by itself (`--node-poke-hz`, default 20): ESP32 CSI only exists when the access point sends
+> the node a frame, so the server sends each active node a 1-byte UDP datagram 20× per second.
+>
 > **Rebuild firmware** (macOS): `source ~/esp/esp-idf/export.sh && cd ../firmware/esp32-csi-node && idf.py build`.
 > Note: an incremental build does **not** re-read `version.txt` — run `idf.py reconfigure` first if you bump the version.
 
@@ -196,14 +211,25 @@ babybreath-app/           ← THIS app (Electron "My Baby")
   not been rebuilt/validated; the current ~1.3 MB app may not fit its smaller partition without tuning.
 - **Unsigned build:** the packaged app is not code-signed or notarized (no Apple Developer ID yet).
   Gatekeeper will warn on first launch — right-click → Open. Must be fixed before public beta.
-- **Packaged provisioning still needs ESP-IDF:** the bundled `provision.py` shells out to the
-  ESP-IDF Python env (`~/.espressif/...`) on the host — a fresh machine without ESP-IDF cannot
-  provision boards from the packaged app. Ship pre-provisioned boards, or bundle esptool, for beta.
+- **The packaged app's wizard still prefers the ESP-IDF Python env** for `provision.py`; the `../cohort/` kit is the
+  ESP-IDF-free path (pip `esptool` + `esp-idf-nvs-partition-gen`) and is what the cohort class uses.
 - **DHCP caveat:** nodes have the server's IP baked into NVS. If the host machine's LAN IP changes,
   UDP won't arrive ("no data") — re-run the setup wizard (auto-detects current IP) or reserve a static IP.
+  The host may also have several LAN IPs (Ethernet vs Wi-Fi on different subnets): the target must be on the
+  network the boards join; `cohort/babybreath.py bootlog` checks the board's "Got IP" against the provisioned target.
+- **Presence of a still person is weak; motion is strong.** The server's `classification.presence` and person count
+  are not shown in the UI any more (they read "present, ~22 persons" in an empty room). The UI's motion meter
+  compares against a per-room empty baseline ("Teach the room"); thresholds were tuned on walking adults.
+- **Breathing on these boards is not yet validated** with a paced test; the raw signal is there once placement is right.
 - Confidence/signal-quality start low until a **room baseline** is captured and buffers fill (~30–60 s).
 
 **Roadmap**
+- Paced-breathing validation (empty 60 s → seated, one breath per 10 s × 90 s) and a breathing estimator that
+  actually tracks the rhythm visible in the raw subcarriers.
+- Hosyond 2.8" ILI9341 on-device display: retarget `display_hal.c` (currently Waveshare ST7789V2/CST816) to the
+  ILI9341 pinout, identify the touch IC, and show the presence grid / motion meter on the node itself.
+- Firmware auto-`filter_mac` on the joined BSSID (upstream RuView declined single-transmitter filtering), and
+  `SO_BROADCAST` on the UDP sender so a broadcast target can replace the baked IP.
 - Guided **calibration wizard** in the consumer app (quiet baseline → guided breathing anchors),
   wiring the existing `/calibration` + `/recording` endpoints into a parent-friendly "Set up this room" flow.
 - Train small specialized RuVector models per vital (breathing / heartbeat / restlessness / posture).

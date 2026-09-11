@@ -102,4 +102,9 @@ pub struct Args {
     /// Start field model calibration on boot (empty room required)
     #[arg(long)]
     pub calibrate: bool,
+
+    /// Send a tiny UDP datagram to each active ESP32 node at this rate so the
+    /// access point keeps generating CSI-bearing downlink frames (0 = off)
+    #[arg(long, default_value = "20")]
+    pub node_poke_hz: u32,
 }

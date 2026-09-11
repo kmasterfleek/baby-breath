@@ -40,10 +40,10 @@
   .status-text { font-size:14px; font-weight:600; transition: color 0.5s; }
 
   /* Main layout */
-  .main { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto 1fr; gap:1px; background:var(--border); }
+  .main { flex:1; display:grid; grid-template-columns:repeat(6, 1fr); grid-template-rows:auto 1fr; gap:1px; background:var(--border); }
 
   /* Big vital cards */
-  .vital-card { background:var(--surface); padding:32px 40px; display:flex; flex-direction:column; }
+  .vital-card { grid-column:span 3; background:var(--surface); padding:32px 40px; display:flex; flex-direction:column; }
   .vital-label { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
   .vital-icon { font-size:18px; }
   .vital-value { font-size:80px; font-weight:700; font-family:'JetBrains Mono',monospace; line-height:1; transition: color 0.6s; }
@@ -52,8 +52,25 @@
   .vital-wave { flex:1; min-height:60px; margin-top:12px; }
 
   /* Bottom panels */
-  .bottom-card { background:var(--surface); padding:24px 32px; display:flex; flex-direction:column; }
+  .bottom-card { grid-column:span 2; background:var(--surface); padding:24px 32px; display:flex; flex-direction:column; }
   .bottom-card h3 { font-size:12px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim); margin-bottom:12px; }
+  .bottom-card h3 span { float:right; text-transform:none; letter-spacing:0; font-weight:400; }
+
+  /* Motion meter (motion_band_power vs. empty-room baseline) */
+  .motion-state { font-size:28px; font-weight:600; transition: color 0.5s; }
+  .motion-state.none { color:var(--dim); font-size:18px; }
+  .motion-state.quiet { color:var(--green); }
+  .motion-state.someone { color:var(--blue); }
+  .motion-state.moving { color:var(--amber); }
+  .motion-ratio { font-size:12px; color:var(--dim); font-family:'JetBrains Mono',monospace; margin-top:4px; }
+  .motion-bar { position:relative; height:8px; border-radius:4px; background:var(--border); margin-top:10px; overflow:hidden; }
+  .motion-bar-fill { height:100%; width:0; border-radius:4px; background:var(--green); transition: width 0.4s, background 0.5s; }
+  .motion-bar-tick { position:absolute; top:0; bottom:0; width:1px; background:var(--dim); opacity:0.6; }
+  .motion-scale { display:flex; justify-content:space-between; font-size:9px; color:var(--dim); font-family:'JetBrains Mono',monospace; margin-top:3px; }
+  .motion-actions { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:10px; color:var(--dim); }
+  .motion-actions .nerd-toggle { margin-left:0; }
+  .teach-panel { margin-top:12px; padding:10px 12px; border:1px solid var(--amber); border-radius:6px; font-size:12px; color:var(--amber); }
+  .teach-panel strong { font-family:'JetBrains Mono',monospace; font-size:16px; }
 
   /* Sleep timer */
   .sleep-time { font-size:48px; font-weight:600; font-family:'JetBrains Mono',monospace; color:var(--blue); }
@@ -128,8 +145,8 @@
 <div class="header">
   <div class="brand">My <em>Baby</em></div>
   <div class="status-bar">
-    <div class="status-dot ok" id="statusDot"></div>
-    <div class="status-text" id="statusText" style="color:var(--green)">Baby Sleeping — All Normal</div>
+    <div class="status-dot warn" id="statusDot"></div>
+    <div class="status-text" id="statusText" style="color:var(--dim)">Connecting to sensor server…</div>
     <button class="nerd-toggle" id="themeToggle" onclick="toggleTheme()">Light</button>
     <button class="nerd-toggle" id="nerdToggle" onclick="toggleNerd()">Nerd Mode</button>
     <button class="nerd-toggle" onclick="location.href='setup.html'" style="margin-left:4px;">Setup</button>
@@ -158,10 +175,25 @@
     <h3>Sleep Session</h3>
     <div class="sleep-time" id="sleepTime">00:00:00</div>
     <div class="sleep-sub" id="sleepSub">Monitoring since —</div>
-    <div style="margin-top:16px;">
-      <div style="font-size:11px; color:var(--dim); margin-bottom:4px;">MOVEMENT</div>
-      <canvas id="motionCanvas" style="width:100%; height:40px;"></canvas>
+  </div>
+
+  <!-- Motion vs. empty-room baseline -->
+  <div class="bottom-card">
+    <h3>Motion <span id="motionTaught"></span></h3>
+    <div class="motion-state none" id="motionState">Teach the room first</div>
+    <div class="motion-ratio" id="motionRatio">motion — (no data)</div>
+    <div class="motion-bar">
+      <div class="motion-bar-fill" id="motionBarFill"></div>
+      <div class="motion-bar-tick" style="left:32.5%"></div>
+      <div class="motion-bar-tick" style="left:50%"></div>
     </div>
+    <div class="motion-scale"><span>0×</span><span>1×</span><span>2×</span><span>3×</span><span>4×</span></div>
+    <div class="motion-actions">
+      <button class="nerd-toggle" id="teachBtn" onclick="startTeach()">Teach the room</button>
+      <span>Quiet &lt; 1.3× · Someone 1.3–2× · Moving &gt; 2×</span>
+    </div>
+    <div class="teach-panel" id="teachPanel" hidden>Leave the room empty for 60 seconds — <strong id="teachCount">60</strong>s remaining</div>
+    <canvas id="motionCanvas" style="width:100%; height:40px; margin-top:12px;"></canvas>
   </div>
 
   <!-- Event Log -->
@@ -230,7 +262,7 @@
       <h3>Raw Readings (last 200)</h3>
       <div class="data-table-wrap">
         <table class="data-table">
-          <thead><tr><th>Time</th><th>BR (BPM)</th><th>HR (BPM)</th><th>Motion</th><th>Presence</th></tr></thead>
+          <thead><tr><th>Time</th><th>BR (BPM)</th><th>HR (BPM)</th><th>Motion</th><th>vs Room</th></tr></thead>
           <tbody id="dataBody"></tbody>
         </table>
       </div>
@@ -245,7 +277,7 @@ const APNEA_TIMEOUT_SEC = 15;
 
 const state = {
   hr: null, br: null, smoothHR: null, smoothBR: null,
-  motion: 0, smoothMotion: 0, presence: false,
+  motion: 0, smoothMotion: 0, wsConnected: false,
   hrHistory: [], brHistory: [], motionHistory: [],
   nodes: new Map(), alerts: [],
   sleepStart: null, lastBreathTime: null, apneaActive: false
@@ -277,7 +309,7 @@ function getWaveColors(type) {
 }
 
 // ─── Session Data Store (persists in IndexedDB) ─────────────
-const sessionData = []; // {ts, br, hr, motion, presence}
+const sessionData = []; // {ts, br, hr, motion, ratio}
 let nerdOpen = false;
 const DB_NAME = 'My BabyDB', STORE_NAME = 'sessions';
 
@@ -331,7 +363,7 @@ function recordReading() {
     br: state.smoothBR ? +state.smoothBR.toFixed(2) : null,
     hr: state.smoothHR ? +state.smoothHR.toFixed(1) : null,
     motion: +state.smoothMotion.toFixed(3),
-    presence: state.presence
+    ratio: motionRatio() != null ? +motionRatio().toFixed(2) : null
   };
   saveReading(reading);
 }
@@ -339,9 +371,9 @@ function recordReading() {
 // ─── Export ─────────────────────────────────────────────────
 function exportCSV() {
   if (!sessionData.length) return;
-  const header = 'timestamp,time,breathing_bpm,heart_rate_bpm,motion_energy,presence\n';
+  const header = 'timestamp,time,breathing_bpm,heart_rate_bpm,motion_energy,motion_ratio\n';
   const rows = sessionData.map(r =>
-    `${r.ts},${r.time},${r.br||''},${r.hr||''},${r.motion},${r.presence}`
+    `${r.ts},${r.time},${r.br||''},${r.hr||''},${r.motion},${r.ratio != null ? r.ratio : ''}`
   ).join('\n');
   download(header + rows, `babybreath-${dateStamp()}.csv`, 'text/csv');
 }
@@ -400,7 +432,7 @@ function renderNerd() {
     <div class="stat-box"><div class="stat-label">Avg BR</div><div class="stat-val" style="color:var(--breath)">${s.br.avg.toFixed(1)}</div><div class="stat-sub">${s.br.min.toFixed(1)} – ${s.br.max.toFixed(1)}</div></div>
     <div class="stat-box"><div class="stat-label">Avg HR</div><div class="stat-val" style="color:var(--heart)">${s.hr.avg.toFixed(0)}</div><div class="stat-sub">${s.hr.min.toFixed(0)} – ${s.hr.max.toFixed(0)}</div></div>
     <div class="stat-box"><div class="stat-label">Avg Motion</div><div class="stat-val">${s.motion.avg.toFixed(2)}</div><div class="stat-sub">${s.motion.min.toFixed(2)} – ${s.motion.max.toFixed(2)}</div></div>
-    <div class="stat-box"><div class="stat-label">Presence</div><div class="stat-val">${sessionData.filter(r=>r.presence).length}</div><div class="stat-sub">of ${s.totalReadings} readings</div></div>
+    <div class="stat-box"><div class="stat-label">Room Baseline</div><div class="stat-val">${meter.baseline ? meter.baseline.toFixed(1) : '—'}</div><div class="stat-sub">${meter.baseline ? 'taught ' + relTime(meter.taughtAt) : 'not taught'}</div></div>
   `;
 
   // Export info
@@ -422,7 +454,7 @@ function renderNerd() {
     <td>${r.br ? r.br.toFixed(1) : '—'}</td>
     <td>${r.hr ? r.hr.toFixed(0) : '—'}</td>
     <td>${r.motion.toFixed(3)}</td>
-    <td>${r.presence ? 'Yes' : 'No'}</td>
+    <td>${r.ratio != null ? r.ratio.toFixed(1) + '×' : '—'}</td>
   </tr>`).join('');
 }
 
@@ -471,35 +503,132 @@ function addAlert(msg, level) {
   if (state.alerts.length > 50) state.alerts.pop();
 }
 
+// ─── Motion meter: motion_band_power vs. this room's empty baseline ──
+// The server's presence/person-count fields are not informative (they read
+// "present" in an empty room), so occupancy is judged only from how far
+// motion_band_power sits above the median measured while the room was empty.
+const BASELINE_KEY = 'babybreath.roomBaseline';
+const TEACH_SEC = 60;
+const meter = { baseline: null, p90: null, taughtAt: null, ema: null, emaTs: 0, teaching: false, samples: [], teachEnd: 0, timer: null };
+
+function loadBaseline() {
+  try {
+    const b = JSON.parse(localStorage.getItem(BASELINE_KEY) || 'null');
+    if (b && b.baseline > 0) { meter.baseline = b.baseline; meter.p90 = b.baseline_p90 || null; meter.taughtAt = b.timestamp || null; }
+  } catch(e) {}
+}
+loadBaseline();
+
+// ~1 s time-constant EMA, alpha derived from the real gap between updates
+function feedMotion(power, now) {
+  if (!(power > 0)) return;
+  if (meter.ema == null) meter.ema = power;
+  else { const dt = Math.min(now - meter.emaTs, 5000); meter.ema += (1 - Math.exp(-dt / 1000)) * (power - meter.ema); }
+  meter.emaTs = now;
+}
+
+function motionRatio() { return (meter.baseline && meter.ema != null) ? meter.ema / meter.baseline : null; }
+function motionLevel() {
+  const r = motionRatio();
+  if (r == null) return 'none';
+  return r < 1.3 ? 'quiet' : r <= 2.0 ? 'someone' : 'moving';
+}
+function roomOccupied() { const l = motionLevel(); return l === 'someone' || l === 'moving'; }
+
+function postCalibration(action) {
+  try { fetch(`/api/v1/calibration/${action}`, { method: 'POST' }).catch(() => {}); } catch(e) {}
+}
+
+function startTeach() {
+  if (meter.teaching) { finishTeach(true); return; }
+  meter.teaching = true; meter.samples = []; meter.teachEnd = Date.now() + TEACH_SEC * 1000;
+  postCalibration('start');
+  addAlert('Teaching the room — leave it empty for ' + TEACH_SEC + 's', 'info');
+  meter.timer = setInterval(() => {
+    const left = Math.max(0, Math.ceil((meter.teachEnd - Date.now()) / 1000));
+    document.getElementById('teachCount').textContent = left;
+    if (left <= 0) finishTeach(false);
+  }, 250);
+  renderMotion(); render();
+}
+
+function finishTeach(cancelled) {
+  clearInterval(meter.timer); meter.timer = null; meter.teaching = false;
+  postCalibration('stop');
+  const s = meter.samples.slice().sort((a, b) => a - b);
+  meter.samples = [];
+  if (cancelled) { addAlert('Room teaching cancelled', 'info'); }
+  else if (s.length < 10) { addAlert('Room teaching failed — not enough sensor data (' + s.length + ' samples)', 'warn'); }
+  else {
+    const n = s.length;
+    meter.baseline = n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+    meter.p90 = s[Math.min(n - 1, Math.floor(0.9 * n))];
+    meter.taughtAt = Date.now();
+    try { localStorage.setItem(BASELINE_KEY, JSON.stringify({ baseline: meter.baseline, baseline_p90: meter.p90, timestamp: meter.taughtAt, samples: n })); } catch(e) {}
+    addAlert(`Room taught — empty baseline ${meter.baseline.toFixed(1)} (p90 ${meter.p90.toFixed(1)}, ${n} samples)`, 'info');
+  }
+  renderMotion(); render();
+}
+
+function relTime(ts) {
+  const sec = Math.max(0, (Date.now() - (ts || 0)) / 1000);
+  if (!ts) return '';
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.floor(sec / 60) + ' min ago';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' h ago';
+  return Math.floor(sec / 86400) + ' d ago';
+}
+
+function renderMotion() {
+  const level = motionLevel(), r = motionRatio();
+  const LABEL = { none: 'Teach the room first', quiet: 'Quiet room', someone: 'Someone here', moving: 'Moving' };
+  const COLOR = { none: 'var(--dim)', quiet: 'var(--green)', someone: 'var(--blue)', moving: 'var(--amber)' };
+  const stateEl = document.getElementById('motionState');
+  stateEl.textContent = LABEL[level]; stateEl.className = 'motion-state ' + level;
+  const fill = document.getElementById('motionBarFill'), ratioEl = document.getElementById('motionRatio');
+  if (r != null) {
+    fill.style.width = (Math.min(r, 4) / 4 * 100) + '%'; fill.style.background = COLOR[level];
+    ratioEl.textContent = r.toFixed(1) + '× empty-room baseline (' + meter.baseline.toFixed(1) + ')';
+  } else {
+    fill.style.width = '0%';
+    ratioEl.textContent = meter.ema != null ? 'motion ' + meter.ema.toFixed(1) + ' (raw, no baseline)' : 'motion — (no data)';
+  }
+  document.getElementById('teachPanel').hidden = !meter.teaching;
+  document.getElementById('teachBtn').textContent = meter.teaching ? 'Cancel' : meter.baseline ? 'Re-teach' : 'Teach the room';
+  document.getElementById('motionTaught').textContent = meter.baseline ? 'taught ' + relTime(meter.taughtAt) : '';
+}
+
 // ─── WebSocket ──────────────────────────────────────────────
 let ws, lastUpdate = 0;
 function connect() {
   const host = location.hostname || 'localhost';
   ws = new WebSocket(`ws://${host}:8765/ws/sensing`);
-  ws.onopen = () => { addAlert('Connected to sensing server', 'info'); };
-  ws.onclose = () => { setTimeout(connect, 2000); };
+  ws.onopen = () => { state.wsConnected = true; addAlert('Connected to sensing server', 'info'); render(); };
+  ws.onclose = () => { state.wsConnected = false; render(); setTimeout(connect, 2000); };
   ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch(err) {} };
 }
 
 function onMsg(msg) {
   if (msg.type !== 'sensing_update') return;
+  const f = msg.features || {};
+  // While teaching, keep every sample (not throttled) for a better median
+  if (meter.teaching && f.motion_band_power > 0) meter.samples.push(f.motion_band_power);
+
   const now = Date.now();
   if (now - lastUpdate < 500) return;
   lastUpdate = now;
 
-  // Start sleep timer on first presence
-  if (!state.sleepStart && msg.classification && msg.classification.presence) {
-    state.sleepStart = now;
-    addAlert('Sleep monitoring started', 'info');
-  }
-
-  const f = msg.features || {};
   state.motion = f.motion_band_power || 0;
+  feedMotion(state.motion, now);
   state.smoothMotion = ema(state.smoothMotion, state.motion, 0.1);
   state.motionHistory.push(state.smoothMotion);
   if (state.motionHistory.length > 120) state.motionHistory.shift();
 
-  state.presence = msg.classification ? msg.classification.presence : false;
+  // Start sleep timer the first time the motion meter says the room is occupied
+  if (!state.sleepStart && roomOccupied()) {
+    state.sleepStart = now;
+    addAlert('Sleep monitoring started', 'info');
+  }
 
   const v = msg.vital_signs || {};
 
@@ -530,7 +659,7 @@ function onMsg(msg) {
   if (msg.nodes) msg.nodes.forEach(n => state.nodes.set(n.node_id, { ...n, ts: now }));
 
   // Check for apnea
-  if (state.lastBreathTime && (now - state.lastBreathTime) > APNEA_TIMEOUT_SEC * 1000 && state.presence) {
+  if (state.lastBreathTime && (now - state.lastBreathTime) > APNEA_TIMEOUT_SEC * 1000 && roomOccupied()) {
     if (!state.apneaActive) {
       state.apneaActive = true;
       addAlert('APNEA ALERT — No breathing detected for ' + APNEA_TIMEOUT_SEC + 's', 'critical');
@@ -589,19 +718,25 @@ function render() {
   const txt = document.getElementById('statusText');
   const banner = document.getElementById('apneaBanner');
 
+  const live = liveNodeCount();
   if (state.apneaActive) {
     dot.className = 'status-dot alert';
     txt.textContent = 'APNEA — Check Baby Now';
     txt.style.color = 'var(--red)';
     banner.style.display = 'block';
-  } else if (!state.presence) {
-    dot.className = 'status-dot ok';
-    txt.textContent = 'No presence detected';
+  } else if (!state.wsConnected) {
+    dot.className = 'status-dot warn';
+    txt.textContent = 'Connecting to sensor server…';
     txt.style.color = 'var(--dim)';
+    banner.style.display = 'none';
+  } else if (live === 0) {
+    dot.className = 'status-dot warn';
+    txt.textContent = 'Connected — no nodes live';
+    txt.style.color = 'var(--amber)';
     banner.style.display = 'none';
   } else {
     dot.className = 'status-dot ok';
-    txt.textContent = 'Baby Sleeping — All Normal';
+    txt.textContent = `${live} node${live === 1 ? '' : 's'} live`;
     txt.style.color = 'var(--green)';
     banner.style.display = 'none';
   }
@@ -641,17 +776,21 @@ function render() {
   ).join('') || '<div class="alert-entry">No events</div>';
 
   renderNodes();
+  renderMotion();
   const brC = getWaveColors('br'), hrC = getWaveColors('hr'), mC = getWaveColors('motion');
   drawWave('brCanvas', state.brHistory, brC.stroke, brC.fill);
   drawWave('hrCanvas', state.hrHistory, hrC.stroke, hrC.fill);
   drawWave('motionCanvas', state.motionHistory, mC.stroke, mC.fill);
 }
 
+function nodeIsLive(n) { return !!n && (n.status === 'active' || (Date.now() - (n.ts||0)) < 5000); }
+function liveNodeCount() { let c = 0; state.nodes.forEach(n => { if (nodeIsLive(n)) c++; }); return c; }
+
 function renderNodes() {
   let html = '';
   for (let id = 1; id <= 2; id++) {
     const n = state.nodes.get(id);
-    const on = n && (n.status === 'active' || (Date.now() - (n.ts||0)) < 5000);
+    const on = nodeIsLive(n);
     const label = id === 1 ? 'Left' : 'Right';
     html += `<div class="node-chip"><div class="node-led ${on?'on':'off'}"></div>Crib ${label}</div>`;
   }
@@ -686,8 +825,9 @@ function drawWave(canvasId, data, strokeColor, fillColor) {
 }
 
 connect();
-// Update sleep timer every second
-setInterval(() => { if (state.sleepStart) render(); }, 1000);
+render();
+// Refresh sleep timer, connection status and motion meter every second
+setInterval(render, 1000);
 </script>
 </body>
 </html>

@@ -64,7 +64,7 @@ pub struct Esp32Frame {
     pub magic: u32,
     pub node_id: u8,
     pub n_antennas: u8,
-    pub n_subcarriers: u8,
+    pub n_subcarriers: u16,
     pub freq_mhz: u16,
     pub sequence: u32,
     pub rssi: i8,

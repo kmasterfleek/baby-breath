@@ -264,3 +264,8 @@ v1/src/sensing/mac_wifi
 # Local build scripts
 firmware/esp32-csi-node/build_firmware.batdata/
 models/
+
+# cohort starter kit local state
+cohort/.venv/
+cohort/.last_provision.json
+cohort/**/__pycache__/

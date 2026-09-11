@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (2026-09-11 — cohort roadmap A)
+- **Cohort starter kit (`cohort/`)** — A pip-only, Claude-Code-driven path from "two boards in hand" to "the room's motion meter moves when I walk": `cohort/babybreath.py` with `setup / detect / flash / provision / bootlog / serve / check / walktest / calibrate` subcommands, each ending in a PASS/FAIL checkpoint; `cohort/RUNBOOK.md` (class session plan with placement diagram and failure branches); `cohort/CLAUDE.md` (instructions for a parent's Claude Code session). No ESP-IDF required — `esptool` 5.x + `esp-idf-nvs-partition-gen` from pip flash and provision the boards. Validated on a Hosyond ESP32-S3 2.8" touchscreen board and a bare ESP32-S3.
+- **Server keeps ESP32 nodes streaming on its own (`--node-poke-hz`, default 20)** — ESP32 CSI is only generated when the access point sends the node a downlink frame; on a quiet home network nothing did, so nodes reported one frame every ~10 s and showed as `stale`. The sensing-server now sends a 1-byte UDP datagram to each active node's source address at 20 Hz (`src/node_poke.rs`), which measured 13–70 Hz CSI on real hardware. `0` disables it.
+- **Baby UI "Teach the room" motion meter** — `ui/baby.html` now shows motion relative to the family's own empty-room baseline (60 s capture, stored per browser) with three states: Quiet room / Someone here / Moving. Teaching also starts the server's field-model calibration.
+
+### Fixed (2026-09-11)
+- **CSI frame header parsed at the wrong offsets** — `parse_esp32_frame` (in both `main.rs` and `csi.rs`) read `sequence` from bytes 10–13, `rssi` from 14 and `noise_floor` from 15, while the firmware writes them at 12–15, 16 and 17 (and `n_subcarriers` as a u16 at 6–7). Per-node RSSI was a byte of the sequence counter (`0.0` / random on `/api/v1/nodes`). Now matches `csi_collector.c`; unit tests build the exact firmware byte layout.
+- **Room calibration never collected frames** — `field_bridge::maybe_feed_calibration` only fed the `FieldModel` when its status was `Collecting`, but a new model starts `Uncalibrated` and only becomes `Collecting` inside the feed, so `/api/v1/calibration/status` stayed at `0/12000` forever (also observed on the July run). The gate now accepts `Uncalibrated`, and frames whose length differs from the model's subcarrier count are linearly resampled instead of being silently dropped. Measured: ~760 frames / 20 s with two nodes, full baseline in ~5 min.
+
+### Changed (2026-09-11)
+- **Baby UI no longer shows the server's `presence` flag or person count.** Measured on hardware: `classification.presence` was `true` 96 % of the time and `persons` averaged ~22 in an **empty** room — identical to a room with a child in bed — so both fields carried no information. The apnea banner and sleep timer now gate on the motion meter instead.
+- `babybreath-app/bin/sensing-server` rebuilt with the fixes above (arm64 macOS).
+
+### Known Issues (2026-09-11)
+- **Mesh WiFi with several access points makes CSI ~4× noisier** (frames from every transmitter are captured). Provision each node with `--filter-mac <bssid it joined>` (read from the boot log). Nodes can roam to another access point on reboot, after which a stale filter yields zero frames — re-read the BSSID and re-provision. Upstream RuView measured and declined to adopt single-transmitter filtering, so this stays a runbook step.
+- Presence detection of a **still** person is weak at chest-distance placement; walking and gross motion are clearly detected. Breathing detection has not yet been validated with a paced test on these boards. The motion-meter thresholds (1.3× / 2.0×) were tuned on walking adults, not a sleeping infant.
+- A board within ~1 ft of the router is effectively blind: keep boards ≥ 8 ft from the router with the body between router and board.
+- The `cohort/` kit's `detect`/`bootlog` were verified against real boards earlier in the session but the final CLI revision was only tested with mocked logs (boards were on wall power at the time). The new `baby.html` passed a JS syntax check but was not visually verified in a browser.
+
 ### Added
 - **"My Baby" app is now packageable into a macOS installer (unsigned)** — Closed the `bin/` packaging gap: `sensing-server` is bundled at `babybreath-app/bin/sensing-server`, and `electron-builder` produces a working `My Baby.app` + DMG. The UI and `provision.py` ship as `extraResources` on real disk (the Rust server child process cannot read inside `app.asar`). Build is unsigned for now (`mac.identity: null`) — notarization needs an Apple Developer ID before beta.
 - **Resilient overnight monitoring** — The app now auto-restarts the sensing-server with exponential backoff if it crashes (the failure mode that killed the first overnight recording), holds a `powerSaveBlocker` so the Mac can't sleep mid-session, and on macOS keeps the server + monitoring running when the window is closed (quit explicitly with Cmd+Q to stop).

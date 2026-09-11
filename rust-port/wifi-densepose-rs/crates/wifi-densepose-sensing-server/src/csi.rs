@@ -67,14 +67,16 @@ pub fn parse_esp32_frame(buf: &[u8]) -> Option<Esp32Frame> {
     let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
     if magic != 0xC511_0001 { return None; }
 
+    // Layout must match firmware csi_collector.c (20-byte header, then I/Q pairs).
     let node_id = buf[4];
     let n_antennas = buf[5];
-    let n_subcarriers = buf[6];
-    let freq_mhz = u16::from_le_bytes([buf[8], buf[9]]);
-    let sequence = u32::from_le_bytes([buf[10], buf[11], buf[12], buf[13]]);
-    let rssi_raw = buf[14] as i8;
+    let n_subcarriers = u16::from_le_bytes([buf[6], buf[7]]);
+    let freq_mhz = u16::try_from(u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]))
+        .unwrap_or(0);
+    let sequence = u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]);
+    let rssi_raw = buf[16] as i8;
     let rssi = if rssi_raw > 0 { rssi_raw.saturating_neg() } else { rssi_raw };
-    let noise_floor = buf[15] as i8;
+    let noise_floor = buf[17] as i8;
 
     let iq_start = 20;
     let n_pairs = n_antennas as usize * n_subcarriers as usize;
@@ -659,7 +661,7 @@ pub fn generate_simulated_frame(tick: u64) -> Esp32Frame {
         phases.push((i as f64 * 0.2 + t * 0.5).sin() * std::f64::consts::PI);
     }
     Esp32Frame {
-        magic: 0xC511_0001, node_id: 1, n_antennas: 1, n_subcarriers: n_sub as u8,
+        magic: 0xC511_0001, node_id: 1, n_antennas: 1, n_subcarriers: n_sub as u16,
         freq_mhz: 2437, sequence: tick as u32,
         rssi: (-40.0 + 5.0 * (t * 0.2).sin()) as i8, noise_floor: -90,
         amplitudes, phases,
@@ -672,4 +674,86 @@ pub fn chrono_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+pub(crate) mod test_frames {
+    /// Build a CSI frame byte buffer exactly as firmware `csi_collector.c` writes it:
+    /// 20-byte header (magic, node, antennas, u16 subcarriers, u32 freq, u32 seq,
+    /// i8 rssi, i8 noise, 2 reserved) followed by (I, Q) i8 pairs.
+    pub(crate) fn firmware_frame(
+        node_id: u8,
+        n_antennas: u8,
+        n_subcarriers: u16,
+        freq_mhz: u32,
+        sequence: u32,
+        rssi: i8,
+        noise_floor: i8,
+        iq: &[(i8, i8)],
+    ) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(20 + iq.len() * 2);
+        buf.extend_from_slice(&0xC511_0001u32.to_le_bytes());
+        buf.push(node_id);
+        buf.push(n_antennas);
+        buf.extend_from_slice(&n_subcarriers.to_le_bytes());
+        buf.extend_from_slice(&freq_mhz.to_le_bytes());
+        buf.extend_from_slice(&sequence.to_le_bytes());
+        buf.push(rssi as u8);
+        buf.push(noise_floor as u8);
+        buf.extend_from_slice(&[0, 0]);
+        for &(i, q) in iq {
+            buf.push(i as u8);
+            buf.push(q as u8);
+        }
+        buf
+    }
+
+    /// 56 deterministic I/Q pairs: I = k - 28, Q = 3.
+    pub(crate) fn sample_iq() -> Vec<(i8, i8)> {
+        (0..56).map(|k| ((k as i8) - 28, 3)).collect()
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::test_frames::{firmware_frame, sample_iq};
+    use super::parse_esp32_frame;
+
+    #[test]
+    fn parses_firmware_header_layout() {
+        let iq = sample_iq();
+        let buf = firmware_frame(2, 1, 56, 2412, 0x0102_0304, -47, -92, &iq);
+        assert_eq!(buf.len(), 20 + 56 * 2);
+
+        let f = parse_esp32_frame(&buf).expect("frame should parse");
+        assert_eq!(f.magic, 0xC511_0001);
+        assert_eq!(f.node_id, 2);
+        assert_eq!(f.n_antennas, 1);
+        assert_eq!(f.n_subcarriers, 56);
+        assert_eq!(f.freq_mhz, 2412);
+        assert_eq!(f.sequence, 0x0102_0304);
+        assert_eq!(f.rssi, -47);
+        assert_eq!(f.noise_floor, -92);
+        assert_eq!(f.amplitudes.len(), 56);
+        assert_eq!(f.phases.len(), 56);
+        for (k, &(i, q)) in iq.iter().enumerate() {
+            let (i, q) = (i as f64, q as f64);
+            assert!((f.amplitudes[k] - (i * i + q * q).sqrt()).abs() < 1e-12);
+            assert!((f.phases[k] - q.atan2(i)).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn positive_rssi_is_normalised_and_short_frames_rejected() {
+        let iq = sample_iq();
+        let buf = firmware_frame(1, 1, 56, 5180, 7, 47, -90, &iq);
+        let f = parse_esp32_frame(&buf).unwrap();
+        assert_eq!(f.rssi, -47);
+        assert_eq!(f.freq_mhz, 5180);
+
+        // Header claims 56 subcarriers but only 10 pairs are present.
+        let short = firmware_frame(1, 1, 56, 2412, 1, -40, -90, &iq[..10]);
+        assert!(parse_esp32_frame(&short).is_none());
+        assert!(parse_esp32_frame(&buf[..19]).is_none());
+    }
 }
