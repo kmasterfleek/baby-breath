@@ -269,3 +269,9 @@ models/
 cohort/.venv/
 cohort/.last_provision.json
 cohort/**/__pycache__/
+
+# not part of the product repo
+RuView-main/
+omega remote/
+hosyond/
+ruvector.db

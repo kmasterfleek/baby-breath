@@ -1,34 +1,79 @@
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<!--  START HERE — orientation for the Baby Breath team                     -->
-<!-- ══════════════════════════════════════════════════════════════════════ -->
+# Baby Breath
 
-> # 👶 START HERE
->
-> **This repo is a fork of RuView / wifi-densepose — a large, general WiFi-sensing platform. You are almost certainly NOT here to work on that platform.**
->
-> You're here for **"My Baby"** — a contactless WiFi baby vital-signs monitor (breathing + heart rate) built *on top of* that platform.
->
-> ## 👉 Read this first: [`babybreath-app/README.md`](babybreath-app/README.md)
->
-> That is the product entry point. Everything below this banner is the underlying platform (the "engine") and is mostly vendored/upstream — read it for reference, but you rarely change it.
->
-> ### Work here / ignore that
->
-> | | Path | What it is |
-> |---|------|-----------|
-> | ✅ | `babybreath-app/` | **The product** — Electron app, UI, provisioning wizard. Your home base. |
-> | ✅ | `rust-port/wifi-densepose-rs/crates/wifi-densepose-sensing-server/` | The one Rust crate the app runs (vitals, pose, fusion). |
-> | ✅ | `firmware/esp32-csi-node/` | ESP32-S3 sensor firmware (only if touching hardware). |
-> | 🔒 | the other 14 crates in `rust-port/.../crates/` | Upstream platform — read-only. |
-> | 🔒 | `v1/`, `docs/adr/`, `plans/`, `examples/`, `vendor/` | Upstream RuView/wifi-densepose. Reference, not the product. |
->
-> ### Mental model
-> ```
-> RuView / wifi-densepose   ← the big fork (engine)   ← DON'T work here
->         └── babybreath-app/   ← the product ("My Baby")   ← WORK HERE
-> ```
->
-> The four core technologies (**DensePose, RuVector, MinCut, RuView**) all live *in the engine* and are already wired up. The app README's tech table shows which file each lives in — read them, but you don't need to rebuild them.
+**Teach your house to feel you walk.**
+*An Omega School project · Cohort One · the second hatchling's first job*
+
+---
+
+Your home WiFi already fills every room with radio waves. When someone walks through a room, the waves bend around them, the way water bends around a hand. Two small boards from your welcome box listen to that bending. A program on your laptop turns it into a meter that moves when you move.
+
+No camera. No microphone. No cloud, no account, nothing leaves your table. The intelligence lives in a box you can open.
+
+This is the same literacy Polynesian navigators had when they read ocean swells through the hull of a canoe, and the same one the Inca used to run an economy on knotted string. You are reading waves. The difference is that these waves are radio, and your children get to watch the reading happen.
+
+You don't teach this. You host it. Claude Code is your lab partner and runs every step with you. Kunal teaches the live class.
+
+## What it can honestly do today
+
+- **Feel a person walk between the boards.** This works, clearly and immediately. A bar on the screen rises when you cross the room and settles when you leave. That is the whole first session.
+- **Learn what your empty room looks like** so it can tell "someone here" from "quiet room." You teach it in sixty seconds.
+- **Show where the signal is strong and where it is blind**, which you will discover by walking, not by reading. A board sitting next to the router feels nothing. Move it eight feet away and it wakes up.
+
+## What it cannot do, and we won't pretend
+
+- **It is not a medical device and never will be.** It is a curiosity and a learning tool. Any breathing or heart number it shows is a signal-processing guess about radio waves in a room, never information about anyone's health. Do not use it to watch a baby, a patient, or anyone else, and never act on its numbers.
+- **Breathing and heart rate are still under test.** The raw signal is there once the boards are placed well, but the estimator on top of it does not yet track it reliably. We removed the parts of the screen that used to claim more than the boards can see. What's left is true.
+- **It does not see a still person well.** Motion is strong; stillness is faint. That is a real property of the physics, and a good conversation for the dinner table.
+
+## The session, in one screen
+
+Everything is in [`cohort/RUNBOOK.md`](cohort/RUNBOOK.md). Open a terminal, then:
+
+```
+cd cohort
+claude
+```
+
+and tell Claude "let's do the runbook." Nine steps, each ending in a line that says `PASS` or `FAIL`. Read that line together before moving on. In order: set up the tools, find your boards, flash them (skip if the instructor did it), give them your WiFi, read their boot log, start the server, check they're live, place them in the room, walk, teach the room.
+
+**What you need on the table**
+
+- A laptop. Mac works best; Windows and Linux got less testing.
+- Python 3.10 or newer, and Claude Code installed.
+- The two boards from your box and two USB **data** cables. Charge-only cables look identical and do nothing.
+- The exact name and password of your 2.4 GHz WiFi network.
+- A room where the boards can sit at least eight feet from the router.
+
+**The rules of the room**, learned the hard way on Kunal's desk:
+
+1. Boards at least eight feet from the router. A board one foot from the router is blind.
+2. Your body between the router and one of the boards, two to three feet from the board, at chest height.
+3. Fan off. A fan is a person that never stops moving.
+4. If your WiFi is a mesh with more than one access point, the runbook has a step for that. Claude will handle it.
+
+## Three depths
+
+- **Six.** Walk across the room and watch the bar. Walk back. Try crawling. Try holding very still. Ask: how does it know?
+- **Ten.** Run the checkpoints with Claude. Teach the room. Then find the blind spot by moving a board until the bar stops caring, and draw the map of where the house can feel you.
+- **Teen.** Read the boot log. Provision a board with the mesh filter. Open `cohort/bbkit/` and change the threshold that decides "someone here." Argue about whether it should be lower for a sleeping child.
+
+## For the engineers and the curious
+
+Under this project is a large open WiFi-sensing engine, RuView / wifi-densepose, forked and tuned. The product layer is small on purpose:
+
+| | Path | What it is |
+|---|------|-----------|
+| ✅ | `cohort/` | The class kit: the CLI with checkpoints, the runbook, and the instructions for a family's Claude. |
+| ✅ | `babybreath-app/` | The "My Baby" desktop app and the page your browser shows. [`babybreath-app/README.md`](babybreath-app/README.md) is the engineering entry point. |
+| ✅ | `rust-port/wifi-densepose-rs/crates/wifi-densepose-sensing-server/` | The one Rust program the class runs. |
+| ✅ | `firmware/esp32-csi-node/` | What runs on the boards. |
+| 🔒 | everything else | The engine. Read it for reference; you rarely change it. |
+
+How it works, in a paragraph: every WiFi packet the router sends a board carries a fingerprint of the radio channel it crossed, called Channel State Information, across dozens of sub-frequencies. A body in the room changes that fingerprint. The boards stream the fingerprints to your laptop twenty times a second; the server compares them against the empty room and turns the difference into the meter. The changelog records what was measured on real boards and what was fixed to get here. Nothing on the screen is simulated.
+
+---
+
+*Ω Omega School develops children who can see, sense, and act inside complex systems. Starting at home.*
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!--  Everything below is the underlying RuView / wifi-densepose platform    -->

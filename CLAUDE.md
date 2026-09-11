@@ -218,6 +218,8 @@ Active feature branch: `ruvsense-full-implementation` (PR #77)
 - `firmware/esp32-csi-node/main/` — ESP32 C firmware (channel hopping, NVS config, TDM)
 - `v1/src/` — Python source (core, hardware, services, api)
 - `v1/data/proof/` — Deterministic CSI proof bundles
+- `cohort/` — Omega School cohort starter kit: `babybreath.py` CLI with PASS/FAIL checkpoints, `RUNBOOK.md`, and a family-facing `CLAUDE.md` (keep that file free of swarm/ADR/engine jargon)
+- `babybreath-app/` — the "My Baby" Electron app, baby UI (`ui/baby.html`), prebuilt `bin/sensing-server` (gitignored build artifact)
 - `.claude-flow/` — Claude Flow coordination state (committed for team sharing)
 - `.claude/` — Claude Code settings, agents, memory (committed for team sharing)
 
