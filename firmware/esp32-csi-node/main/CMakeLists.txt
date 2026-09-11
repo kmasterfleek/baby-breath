@@ -16,8 +16,15 @@ endif()
 
 # ADR-045: AMOLED display support (compile-time optional)
 if(CONFIG_DISPLAY_ENABLE)
-    list(APPEND SRCS "display_hal.c" "display_ui.c" "display_task.c")
-    set(REQUIRES esp_lcd esp_lcd_touch lvgl)
+    if(CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341)
+        # Hosyond 2.8" ILI9341: UDP-fed heatmap strips, no LVGL, no touch.
+        list(APPEND SRCS "display_hal_ili9341.c" "display_heat.c")
+        set(REQUIRES esp_lcd esp_lcd_ili9341)
+    else()
+        # Waveshare 1.69" ST7789V2 + CST816: LVGL UI (unchanged default path).
+        list(APPEND SRCS "display_hal.c" "display_ui.c" "display_task.c")
+        set(REQUIRES esp_lcd esp_lcd_touch lvgl)
+    endif()
 endif()
 
 idf_component_register(

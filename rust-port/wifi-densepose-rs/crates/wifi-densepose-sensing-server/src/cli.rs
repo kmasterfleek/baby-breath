@@ -107,4 +107,17 @@ pub struct Args {
     /// access point keeps generating CSI-bearing downlink frames (0 = off)
     #[arg(long, default_value = "20")]
     pub node_poke_hz: u32,
+
+    /// Node id of the board that has a screen; when set, normalised CSI
+    /// "display rows" for every node are pushed to that node's last known IP
+    #[arg(long, value_name = "ID")]
+    pub display_node: Option<u8>,
+
+    /// UDP port on the display node that receives display rows
+    #[arg(long, default_value = "5006")]
+    pub display_port: u16,
+
+    /// Maximum display rows per second per node
+    #[arg(long, default_value = "15")]
+    pub display_hz: u32,
 }

@@ -68,6 +68,34 @@ bool display_hal_touch_read(uint16_t *x, uint16_t *y);
  */
 void display_hal_set_brightness(uint8_t percent);
 
+/* ---- Direct-draw API (implemented by display_hal_ili9341.c, Hosyond board) ---- */
+
+/**
+ * Pack an 8-bit RGB triple into RGB565 in panel byte order (big-endian on
+ * the wire, so byte-swapped in ESP32 memory). Use for both draw_bitmap and
+ * fill_rect pixel values.
+ */
+static inline uint16_t display_hal_rgb565(uint8_t r, uint8_t g, uint8_t b)
+{
+    uint16_t c = (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+    return (uint16_t)((c << 8) | (c >> 8));
+}
+
+/**
+ * Draw a w x h RGB565 bitmap at (x, y). Blocks until the SPI transfer
+ * completes, so the caller may reuse the buffer on return.
+ *
+ * @param rgb565  w*h pixels in panel byte order (see display_hal_rgb565).
+ * @return ESP_OK, ESP_ERR_INVALID_STATE if no panel, ESP_ERR_INVALID_ARG
+ *         if the rectangle is empty or off-screen.
+ */
+esp_err_t display_hal_draw_bitmap(int x, int y, int w, int h, const void *rgb565);
+
+/**
+ * Fill a w x h rectangle at (x, y) with one colour (panel byte order).
+ */
+esp_err_t display_hal_fill_rect(int x, int y, int w, int h, uint16_t color);
+
 #ifdef __cplusplus
 }
 #endif

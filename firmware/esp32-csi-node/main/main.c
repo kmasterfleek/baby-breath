@@ -28,6 +28,7 @@
 #include "wasm_runtime.h"
 #include "wasm_upload.h"
 #include "display_task.h"
+#include "display_heat.h"
 #include "mmwave_sensor.h"
 #include "swarm_bridge.h"
 #include "ble_prov.h"
@@ -145,7 +146,13 @@ void app_main(void)
 
     /* ADR-045: Start AMOLED display EARLY so node ID is visible during WiFi connect. */
 #ifdef CONFIG_DISPLAY_ENABLE
+#if CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341
+    /* Hosyond: bring up the ILI9341 and draw the static chrome now; the
+     * UDP-fed heatmap task is started once WiFi is up (see below). */
+    esp_err_t disp_ret = display_heat_init();
+#else
     esp_err_t disp_ret = display_task_start();
+#endif
     if (disp_ret != ESP_OK) {
         ESP_LOGW(TAG, "Display init returned: %s", esp_err_to_name(disp_ret));
     }
@@ -180,6 +187,14 @@ void app_main(void)
     }
 #else
     ESP_LOGI(TAG, "Mock CSI mode: skipping WiFi init (CONFIG_CSI_MOCK_SKIP_WIFI_CONNECT)");
+#endif
+
+#if defined(CONFIG_DISPLAY_ENABLE) && CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341 && !defined(CONFIG_CSI_MOCK_SKIP_WIFI_CONNECT)
+    /* Hosyond: WiFi is up — start the UDP heatmap receiver/drawer task. */
+    esp_err_t heat_ret = display_heat_start();
+    if (heat_ret != ESP_OK) {
+        ESP_LOGW(TAG, "Heat display start returned: %s", esp_err_to_name(heat_ret));
+    }
 #endif
 
     /* Initialize UDP sender with runtime target */

@@ -11,6 +11,7 @@
 mod adaptive_classifier;
 pub mod cli;
 pub mod csi;
+mod display_push;
 mod field_bridge;
 mod multistatic_bridge;
 mod node_poke;
@@ -171,6 +172,19 @@ struct Args {
     /// access point keeps generating CSI-bearing downlink frames (0 = off)
     #[arg(long, default_value = "20")]
     node_poke_hz: u32,
+
+    /// Node id of the board that has a screen; when set, normalised CSI
+    /// "display rows" for every node are pushed to that node's last known IP
+    #[arg(long, value_name = "ID")]
+    display_node: Option<u8>,
+
+    /// UDP port on the display node that receives display rows
+    #[arg(long, default_value = "5006")]
+    display_port: u16,
+
+    /// Maximum display rows per second per node
+    #[arg(long, default_value = "15")]
+    display_hz: u32,
 }
 
 // ── Data types ───────────────────────────────────────────────────────────────
@@ -526,6 +540,8 @@ struct AppStateInner {
     /// Per-node sensing state for multi-node deployments.
     /// Keyed by `node_id` from the ESP32 frame header.
     node_states: HashMap<u8, NodeState>,
+    /// Display-row push to a node with a screen (`--display-node`), if enabled.
+    display_push: Option<display_push::DisplayPush>,
     // ── Accuracy sprint: Kalman tracker, multistatic fusion, eigenvalue counting ──
     /// Global Kalman-based pose tracker for stable person IDs and smoothed keypoints.
     pose_tracker: PoseTracker,
@@ -3805,6 +3821,12 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                     // to avoid unsafe raw pointer (review finding #2).
                     let adaptive_model_clone = s.adaptive_model.clone();
 
+                    // Display push: update running means and queue a row for
+                    // the screen node (non-blocking; see display_push.rs).
+                    if let Some(dp) = s.display_push.as_mut() {
+                        dp.observe(node_id, &frame.amplitudes, std::time::Instant::now());
+                    }
+
                     let ns = s.node_states.entry(node_id).or_insert_with(NodeState::new);
                     ns.last_frame_time = Some(std::time::Instant::now());
                     ns.last_addr = Some(src);
@@ -4684,6 +4706,13 @@ async fn main() {
     info!("Discovered {} model files, {} recording files", initial_models.len(), initial_recordings.len());
 
     let (tx, _) = broadcast::channel::<String>(256);
+    let (display_push, display_rx) = match args.display_node {
+        Some(_) => {
+            let (dp, rx) = display_push::DisplayPush::new(args.display_hz);
+            (Some(dp), Some(rx))
+        }
+        None => (None, None),
+    };
     let state: SharedState = Arc::new(RwLock::new(AppStateInner {
         latest_update: None,
         rssi_history: VecDeque::new(),
@@ -4735,6 +4764,7 @@ async fn main() {
             m
         }),
         node_states: HashMap::new(),
+        display_push,
         // Accuracy sprint
         pose_tracker: PoseTracker::new(),
         last_tracker_instant: None,
@@ -4759,6 +4789,12 @@ async fn main() {
             None
         },
     }));
+
+    if let (Some(rx), Some(id)) = (display_rx, args.display_node) {
+        tokio::spawn(display_push::sender_task(
+            state.clone(), rx, id, args.display_port, args.display_hz,
+        ));
+    }
 
     // Start background tasks based on source
     match source {

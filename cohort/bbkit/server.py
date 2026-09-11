@@ -24,7 +24,8 @@ def cmd_serve(args) -> int:
         return checkpoint("serve", False, f"server binary not found at {c.SERVER_BIN} (ask the instructor for it)")
     cmd = [str(c.SERVER_BIN), "--bind-addr", "0.0.0.0", "--source", "esp32",
            "--ui-path", str(c.UI_DIR), "--http-port", str(c.HTTP_PORT),
-           "--ws-port", str(c.WS_PORT), "--udp-port", str(c.UDP_PORT)]
+           "--ws-port", str(c.WS_PORT), "--udp-port", str(c.UDP_PORT),
+           "--display-node", "1"]  # board 1 is the one with the screen
     if args.extra:
         cmd += args.extra
     say("$ " + " ".join(cmd))

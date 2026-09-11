@@ -492,6 +492,14 @@ esp_err_t mmwave_sensor_init(int uart_tx_pin, int uart_rx_pin)
     return ESP_OK;
 
 #else
+#if CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341
+    /* Hosyond 2.8" board: GPIO17/18 are the touch INT/RST lines. Do not
+     * drive them with the UART1 probe unless the caller passed explicit pins. */
+    if (uart_tx_pin < 0 && uart_rx_pin < 0) {
+        ESP_LOGI(TAG, "Hosyond display board: skipping mmWave UART probe (GPIO17/18 are touch pins)");
+        return ESP_ERR_NOT_FOUND;
+    }
+#endif
     if (uart_tx_pin < 0) uart_tx_pin = 17;
     if (uart_rx_pin < 0) uart_rx_pin = 18;
 

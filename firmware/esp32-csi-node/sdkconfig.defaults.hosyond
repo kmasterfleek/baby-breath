@@ -1,0 +1,6 @@
+# Hosyond ESP32-S3 2.8" ILI9341 overlay — apply AFTER sdkconfig.defaults:
+#   SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.hosyond" idf.py -B build-hosyond build
+# (see README "Hosyond 2.8in heatmap display build"). Runs without SPIRAM.
+CONFIG_DISPLAY_ENABLE=y
+CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341=y
+CONFIG_DISPLAY_HEAT_UDP_PORT=5006

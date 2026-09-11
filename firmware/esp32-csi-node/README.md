@@ -245,6 +245,29 @@ CONFIG_WASM_MAX_MODULES=4
 CONFIG_WASM_VERIFY_SIGNATURE=y
 ```
 
+### Hosyond 2.8in heatmap display build
+
+The Hosyond ESP32-S3 2.8" ILI9341 board replaces the LVGL UI with two UDP-fed
+heatmap strip charts ("What the boards feel"): the sensing-server pushes one
+"display row" packet per board to UDP port `CONFIG_DISPLAY_HEAT_UDP_PORT`
+(default 5006) and the board draws it as a 1-px column (see `main/display_heat.h`
+for the packet format). Touch is not initialised and the mmWave UART1 probe is
+skipped (GPIO17/18 are the touch pins). Build it into its own directory so the
+default Waveshare build in `build/` is untouched:
+
+```bash
+source ~/esp/esp-idf/export.sh
+idf.py -B build-hosyond \
+  -DSDKCONFIG=build-hosyond/sdkconfig \
+  -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.hosyond" \
+  build
+# flash with: idf.py -B build-hosyond -p <PORT> flash
+```
+
+The overlay `sdkconfig.defaults.hosyond` selects `CONFIG_DISPLAY_BOARD_HOSYOND_28_ILI9341`
+(the default choice is `CONFIG_DISPLAY_BOARD_WAVESHARE_169`). Panel pins are fixed in
+`main/display_hal_ili9341.c`.
+
 ---
 
 ## Flashing

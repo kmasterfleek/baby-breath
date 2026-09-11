@@ -110,6 +110,37 @@ menu "AMOLED Display (ADR-045)"
             Auto-detects at boot; gracefully skips if no display hardware.
             Requires SPIRAM for frame buffers.
 
+    choice DISPLAY_BOARD
+        prompt "Display board"
+        depends on DISPLAY_ENABLE
+        default DISPLAY_BOARD_WAVESHARE_169
+        help
+            Selects the attached display board. The Waveshare path runs the
+            LVGL 4-view UI; the Hosyond path runs the UDP-fed heatmap strip
+            charts ("What the boards feel") without LVGL or touch.
+
+        config DISPLAY_BOARD_WAVESHARE_169
+            bool "Waveshare ESP32-S3-Touch-LCD-1.69 (ST7789V2 + CST816, LVGL UI)"
+
+        config DISPLAY_BOARD_HOSYOND_28_ILI9341
+            bool "Hosyond ESP32-S3 2.8in ILI9341 (heatmap strip charts, no touch)"
+            help
+                Pins are fixed in display_hal_ili9341.c: CS=10 DC=46 SCLK=12
+                MOSI=11 MISO=13 BL=45, RST tied to EN. Touch (I2C 16/15,
+                RST=18, INT=17) is not initialised; the mmWave UART1 probe on
+                GPIO17/18 is skipped.
+    endchoice
+
+    config DISPLAY_HEAT_UDP_PORT
+        int "Heatmap row UDP listen port"
+        default 5006
+        range 1024 65535
+        depends on DISPLAY_BOARD_HOSYOND_28_ILI9341
+        help
+            UDP port the sensing-server pushes "display row" packets to.
+            Packet: u32 LE magic 0xC5110010, u8 node_id (1|2), u8 n_bins
+            (1..64), u8 flags (bit0 = board active), u8 reserved, n_bins x u8.
+
     config DISPLAY_FPS_LIMIT
         int "Display refresh rate limit (FPS)"
         default 30
